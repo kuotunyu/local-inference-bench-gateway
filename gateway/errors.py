@@ -1,10 +1,8 @@
 """OpenAI-shaped error envelopes for gateway-level failures.
 
-Errors that originate from a live backend (the engine itself returned 4xx/5xx) are passed
-through as-is instead of using these -- llama.cpp/Ollama/LM Studio all already return
-OpenAI-shaped {"error": {...}} bodies (verified in Part A), so wrapping them again would be
-redundant. These helpers are only for failures the gateway itself detects: unknown alias,
-malformed request, unreachable backend, upstream timeout.
+Structured errors that originate from a live backend are passed through instead of being wrapped
+again. These helpers are only for failures the gateway itself detects: unknown alias, malformed
+request, unreachable backend, upstream timeout, or an unusable upstream response envelope.
 """
 
 from __future__ import annotations

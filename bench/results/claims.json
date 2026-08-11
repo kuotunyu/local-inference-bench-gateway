@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "claims": [
+    {
+      "id": "llamacpp-throughput-c16",
+      "display": "llama.cpp: 625.55 tok/s at concurrency 16",
+      "document": "README.md",
+      "claim_class": "measured",
+      "value": 625.55,
+      "round_digits": 2,
+      "selector": {
+        "kind": "csv_value",
+        "path": "bench/results/concurrency_summary.csv",
+        "filters": {"engine": "llamacpp", "concurrency": "16"},
+        "field": "median_aggregate_tok_s"
+      }
+    },
+    {
+      "id": "ollama-throughput-c16",
+      "display": "Ollama: 704.98 tok/s at concurrency 16",
+      "document": "README.md",
+      "claim_class": "measured",
+      "value": 704.98,
+      "round_digits": 2,
+      "selector": {
+        "kind": "csv_value",
+        "path": "bench/results/concurrency_summary.csv",
+        "filters": {"engine": "ollama", "concurrency": "16"},
+        "field": "median_aggregate_tok_s"
+      }
+    },
+    {
+      "id": "lmstudio-throughput-c16",
+      "display": "LM Studio: 686.72 tok/s at concurrency 16",
+      "document": "README.md",
+      "claim_class": "measured",
+      "value": 686.72,
+      "round_digits": 2,
+      "selector": {
+        "kind": "csv_value",
+        "path": "bench/results/concurrency_summary.csv",
+        "filters": {"engine": "lmstudio", "concurrency": "16"},
+        "field": "median_aggregate_tok_s"
+      }
+    },
+    {
+      "id": "lmstudio-prefill-8k",
+      "display": "LM Studio: 1.239 s median TTFT at the 8,000-token target",
+      "document": "EVAL_REPORT.md",
+      "claim_class": "measured",
+      "value": 1.239,
+      "round_digits": 3,
+      "selector": {
+        "kind": "csv_value",
+        "path": "bench/results/prefill_summary.csv",
+        "filters": {"engine": "lmstudio", "prompt_target_tokens": "8000"},
+        "field": "median_ttft_s"
+      }
+    },
+    {
+      "id": "lmstudio-vram-ratio-c16",
+      "display": "LM Studio's 6,515 MiB baseline was 42.7% of llama.cpp's 15,271 MiB baseline at concurrency 16",
+      "document": "EVAL_REPORT.md",
+      "claim_class": "derived",
+      "value": 42.7,
+      "round_digits": 1,
+      "selector": {
+        "kind": "ratio_percent",
+        "numerator": {
+          "kind": "csv_value",
+          "path": "bench/results/concurrency_summary.csv",
+          "filters": {"engine": "lmstudio", "concurrency": "16"},
+          "field": "median_vram_baseline_mb"
+        },
+        "denominator": {
+          "kind": "csv_value",
+          "path": "bench/results/concurrency_summary.csv",
+          "filters": {"engine": "llamacpp", "concurrency": "16"},
+          "field": "median_vram_baseline_mb"
+        }
+      }
+    },
+    {
+      "id": "gateway-overhead",
+      "display": "Gateway median TTFT overhead: 1.66 ms",
+      "document": "README.md",
+      "claim_class": "measured",
+      "value": 1.66,
+      "round_digits": 2,
+      "selector": {
+        "kind": "json_key",
+        "path": "bench/results/gateway_overhead.json",
+        "key": "overhead_ms"
+      }
+    },
+    {
+      "id": "lmstudio-kv-on-c14",
+      "display": "LM Studio Unified KV Cache ON: 4,024 ms p50 TTFT at concurrency 14",
+      "document": "EVAL_REPORT.md",
+      "claim_class": "controlled_observation",
+      "value": 4024,
+      "round_digits": 0,
+      "selector": {
+        "kind": "json_list_value",
+        "path": "bench/results/lmstudio_concurrency_boundary_scan_unified_kv_on.json",
+        "filters": {"concurrency": 14},
+        "field": "ttft_p50_s",
+        "multiply": 1000
+      }
+    },
+    {
+      "id": "lmstudio-kv-off-c16",
+      "display": "LM Studio Unified KV Cache OFF: 430 ms p50 TTFT at concurrency 16",
+      "document": "EVAL_REPORT.md",
+      "claim_class": "controlled_observation",
+      "value": 430,
+      "round_digits": 0,
+      "selector": {
+        "kind": "json_list_value",
+        "path": "bench/results/lmstudio_concurrency_boundary_scan.json",
+        "filters": {"concurrency": 16},
+        "field": "ttft_p50_s",
+        "multiply": 1000
+      }
+    }
+  ]
+}

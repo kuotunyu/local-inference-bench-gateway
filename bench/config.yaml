@@ -10,7 +10,7 @@ engines:
     base_url: "http://127.0.0.1:11434/v1"
     # Ollama bakes context size into the model via Modelfile `PARAMETER num_ctx` (llama-server/LM
     # Studio take it as a server launch flag instead), so matching per_slot_ctx across engines
-    # needs two separate Ollama model tags -- one per server profile. See scripts/setup_ollama.ps1.
+    # needs two separate Ollama model tags -- one per server profile. See SETUP.md.
     model: "bench-model-c"
     model_by_test:
       concurrency: "bench-model-c"

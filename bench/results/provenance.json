@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "digest_policy": "SHA-256 over original bytes for PNG; SHA-256 after CRLF-to-LF normalization for CSV and JSON",
+  "control_manifests": [
+    "bench/results/provenance.json",
+    "bench/results/claims.json"
+  ],
+  "source_snapshot": {
+    "commit": "f7b80d221460f1e1219a0ec5c7044465ea961dba",
+    "branch": "main",
+    "role": "read-only private evidence source; history was not imported"
+  },
+  "measurement": {
+    "date": "2026-07-17",
+    "hardware": {
+      "gpu": "NVIDIA GeForce RTX 4090",
+      "vram_mib": 24564,
+      "driver": "591.86",
+      "os": "Windows 11 Home",
+      "os_build": "26200"
+    },
+    "engines": {
+      "llamacpp": "b10057 (CUDA 12.4 build)",
+      "ollama": "0.32.0 (recorded internal llama-server b9888)",
+      "lmstudio": "lms CLI commit 9902c3a; llama.cpp-win-x86_64-nvidia-cuda12-avx2@2.25.2"
+    },
+    "model": {
+      "repository": "mistralai/Ministral-3-8B-Instruct-2512-GGUF",
+      "filename": "Ministral-3-8B-Instruct-2512-Q4_K_M.gguf",
+      "size_bytes": 5198911904,
+      "sha256": "33e7a72cf5e6e2cfc2f2847075acc013d68bba023e35310cef86b5cf8fdca761"
+    },
+    "method": {
+      "warmup_runs": 3,
+      "timed_runs": 5,
+      "temperature": 0,
+      "top_p": 1.0,
+      "max_tokens": 256,
+      "seed": 42,
+      "request_nonce": "random 8-character nonce prepended to every measured user prompt",
+      "engine_isolation": "one measured engine resident on the GPU at a time"
+    },
+    "public_raw_request_runs": false,
+    "raw_data_note": "Only aggregate summaries, calibrated inputs, controlled scans, and derived charts are public; request-level raw runs were intentionally not published."
+  },
+  "artifacts": [
+    {
+      "path": "bench/results/concurrency_summary.csv",
+      "sha256": "766de9bc2c0c435de2eecfdf393fa88c03455041a97cb5c670c7290a4b527721",
+      "class": "measured_summary",
+      "description": "Five-run median concurrency summaries for all three engines"
+    },
+    {
+      "path": "bench/results/gateway_overhead.json",
+      "sha256": "383d2efc5bfbd799f4abdd5a7be03b57592896e9550c4cf7ad4e7157e482d13d",
+      "class": "measured_summary",
+      "description": "Direct versus gateway median and p95 latency summary"
+    },
+    {
+      "path": "bench/results/lmstudio_concurrency_boundary_scan.json",
+      "sha256": "5a59a440b2c1d22208b6eb820d7d2277ad75656c5d96a0079ff142889757560a",
+      "class": "measured_control",
+      "description": "LM Studio concurrency 1-16 scan with Unified KV Cache disabled"
+    },
+    {
+      "path": "bench/results/lmstudio_concurrency_boundary_scan_unified_kv_on.json",
+      "sha256": "ed7a6cb7374ab016c0a2cd389ab811bdf921d344a8daa768012a1e47d3b9b15a",
+      "class": "measured_control",
+      "description": "LM Studio concurrency 1-16 scan with Unified KV Cache enabled"
+    },
+    {
+      "path": "bench/results/lmstudio_unified_kv_cache_comparison.png",
+      "sha256": "89ab3641e20b6ed430f210c18894e44d5c54998fa2cfbb0820caf649766705ac",
+      "class": "derived_chart",
+      "description": "Chart derived from the paired LM Studio control scans"
+    },
+    {
+      "path": "bench/results/prefill_summary.csv",
+      "sha256": "0def5c93e7b203cb9c6119e70f4e0f13bd4c6e74d178bac5d954bf30666d14f1",
+      "class": "measured_summary",
+      "description": "Five-run median prefill summaries for calibrated 2k and 8k inputs"
+    },
+    {
+      "path": "bench/results/prefill_time_vs_prompt_length.png",
+      "sha256": "7f9966429d9d00627a5687656402fba4bab6fb50436af9a14563f83cfa4f3960",
+      "class": "derived_chart",
+      "description": "Prefill chart derived from prefill_summary.csv"
+    },
+    {
+      "path": "bench/results/prompts/prompt_2000.json",
+      "sha256": "18900a39e613825bb8a30f9c0053e71ea8e85a26eefc0215f5a892fd989a7550",
+      "class": "calibrated_input",
+      "description": "Synthetic prompt calibrated to 1,970 tokens on the reference engine"
+    },
+    {
+      "path": "bench/results/prompts/prompt_8000.json",
+      "sha256": "7296d0eaaa9f80a8af7be942688db78e56534d956ef877fb7fa78dea288621e6",
+      "class": "calibrated_input",
+      "description": "Synthetic prompt calibrated to 7,880 tokens on the reference engine"
+    },
+    {
+      "path": "bench/results/throughput_vs_concurrency.png",
+      "sha256": "78e4e035f98d40e98505db7e58b9b475206e7caecad630422589733798b6d734",
+      "class": "derived_chart",
+      "description": "Throughput chart derived from concurrency_summary.csv"
+    },
+    {
+      "path": "bench/results/ttft_vs_concurrency.png",
+      "sha256": "e709e9fcc4913960915150b35858979c8657d2961d68bf34d91a2e77af342b54",
+      "class": "derived_chart",
+      "description": "TTFT chart derived from concurrency_summary.csv"
+    },
+    {
+      "path": "bench/results/vram_usage.png",
+      "sha256": "d2472cf35c9cb53ea4b259473f20280e4f77f18b5483c90cf1dc98230812906d",
+      "class": "derived_chart",
+      "description": "VRAM chart derived from concurrency_summary.csv"
+    }
+  ]
+}
