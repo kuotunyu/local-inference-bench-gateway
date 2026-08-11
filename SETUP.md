@@ -56,7 +56,8 @@ uv run streamlit run dashboard/app.py --server.address 127.0.0.1
 
 The normal Compose file runs only the gateway and dashboard. It expects separately managed host
 inference services and binds published ports to `127.0.0.1`. The smoke Compose file is CPU-only and
-uses deterministic mock backends:
+uses deterministic mock backends. Run these commands from the repository root—the directory that
+contains `Dockerfile` and `compose.smoke.yaml`:
 
 ```bash
 docker compose up --build

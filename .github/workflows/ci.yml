@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.18"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Lint and format
+        run: |
+          uv run --frozen ruff check .
+          uv run --frozen ruff format --check .
+
+      - name: CPU tests and release policy
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          uv run --frozen pytest -q -p no:cacheprovider
+          uv run --frozen python -m release_checks.cli
+
+      - name: Build non-root production image
+        run: docker build -t local-inference-bench-gateway:rc .
+
+      - name: CPU-only Compose smoke
+        run: >-
+          docker compose -f compose.smoke.yaml up --build --abort-on-container-exit
+          --exit-code-from smoke-client
+
+      - name: Always remove smoke resources
+        if: always()
+        run: docker compose -f compose.smoke.yaml down --volumes --remove-orphans

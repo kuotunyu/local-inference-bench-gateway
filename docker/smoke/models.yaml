@@ -1,0 +1,10 @@
+models:
+  smoke-alias:
+    max_concurrent: 2
+    backends:
+      - name: primary
+        base_url: "http://mock-primary:8000/v1"
+        model: "mock-primary"
+      - name: fallback
+        base_url: "http://mock-fallback:8000/v1"
+        model: "mock-fallback"

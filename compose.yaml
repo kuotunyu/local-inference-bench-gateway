@@ -1,0 +1,50 @@
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local-inference-bench-gateway:rc
+    environment:
+      GATEWAY_API_KEY: "${GATEWAY_API_KEY:-replace-with-a-random-local-value}"
+      GATEWAY_MODELS_PATH: /app/gateway/models.docker.yaml
+      GATEWAY_DB_PATH: /app/data/gateway.db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - gateway-data:/app/data
+    restart: unless-stopped
+
+  dashboard:
+    image: local-inference-bench-gateway:rc
+    command:
+      - streamlit
+      - run
+      - dashboard/app.py
+      - --server.address=0.0.0.0
+      - --server.port=8501
+      - --server.headless=true
+    environment:
+      GATEWAY_DB_PATH: /app/data/gateway.db
+    ports:
+      - "127.0.0.1:8501:8501"
+    volumes:
+      - gateway-data:/app/data
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=2).read()"
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  gateway-data:

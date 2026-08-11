@@ -7,7 +7,6 @@ engines
 bench
 tests
 release_checks
-docker
 docs
 scripts
 data

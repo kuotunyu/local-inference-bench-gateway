@@ -1,0 +1,79 @@
+services:
+  mock-primary:
+    build:
+      context: .
+      dockerfile: docker/smoke/Dockerfile
+    image: local-inference-smoke-backend:rc
+    environment:
+      MOCK_ROLE: primary
+    command: ["python", "/smoke/mock_backend.py"]
+    networks: [smoke-net]
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/models', timeout=2).read()"
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  mock-fallback:
+    image: local-inference-smoke-backend:rc
+    environment:
+      MOCK_ROLE: fallback
+    command: ["python", "/smoke/mock_backend.py"]
+    networks: [smoke-net]
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      mock-primary:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/models', timeout=2).read()"
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local-inference-bench-gateway:rc
+    environment:
+      GATEWAY_API_KEY: smoke-test-key
+      GATEWAY_MODELS_PATH: /app/gateway/models.smoke.yaml
+      GATEWAY_DB_PATH: /app/data/gateway.db
+    volumes:
+      - ./docker/smoke/models.yaml:/app/gateway/models.smoke.yaml:ro
+    tmpfs:
+      - /app/data:uid=10001,gid=10001,mode=0770
+    networks: [smoke-net]
+    depends_on:
+      mock-primary:
+        condition: service_healthy
+      mock-fallback:
+        condition: service_healthy
+
+  smoke-client:
+    image: local-inference-smoke-backend:rc
+    command: ["python", "/smoke/smoke_client.py"]
+    environment:
+      GATEWAY_URL: http://gateway:9000
+      GATEWAY_API_KEY: smoke-test-key
+    networks: [smoke-net]
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      gateway:
+        condition: service_started
+
+networks:
+  smoke-net:
+    internal: true
