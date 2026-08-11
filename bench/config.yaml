@@ -1,0 +1,66 @@
+# Benchmark configuration shared by all bench/*.py scripts.
+# Engine base_url values assume every engine is bound to 127.0.0.1 (see SETUP.md for ports).
+
+engines:
+  llamacpp:
+    base_url: "http://127.0.0.1:8080/v1"
+    model: "bench-model"
+    api_key: null
+  ollama:
+    base_url: "http://127.0.0.1:11434/v1"
+    # Ollama bakes context size into the model via Modelfile `PARAMETER num_ctx` (llama-server/LM
+    # Studio take it as a server launch flag instead), so matching per_slot_ctx across engines
+    # needs two separate Ollama model tags -- one per server profile. See scripts/setup_ollama.ps1.
+    model: "bench-model-c"
+    model_by_test:
+      concurrency: "bench-model-c"
+      prefill: "bench-model-p"
+    api_key: "ollama"        # ollama ignores the key but the OpenAI client requires a non-empty value
+  lmstudio:
+    base_url: "http://127.0.0.1:1234/v1"
+    model: "bench-model"
+    api_key: "lm-studio"
+
+# Sent as the system message on EVERY request. Ministral's chat template injects a ~550-token
+# default system message (with the CURRENT DATE substituted in) whenever no system message is
+# given -- that makes prompt_tokens both non-reproducible day-to-day and unreplicatable in
+# Ollama's Go template engine (which cannot execute the model's Jinja template). Supplying our
+# own short, static system message bypasses that branch entirely on all three engines.
+system_prompt: "You are a helpful, concise assistant."
+
+# Sampling parameters held identical across engines and requests (temperature=0 for determinism).
+# repeat_penalty is NOT sent per-request -- Ollama's /v1 endpoint silently ignores it, so it must be
+# baked into each engine's own config (Ollama Modelfile PARAMETER repeat_penalty 1.0) instead.
+sampling:
+  temperature: 0
+  top_p: 1.0
+  max_tokens: 256
+  seed: 42
+
+warmup_runs: 3
+timed_runs: 5
+
+concurrency_levels: [1, 4, 8, 16]
+prompt_token_targets: [2000, 8000]
+prompt_tolerance_pct: 2.0
+
+# Two server profiles (see SETUP.md for exact per-engine launch flags/env vars).
+server_profiles:
+  concurrency:
+    per_slot_ctx: 4096
+    slots: 16
+  prefill:
+    per_slot_ctx: 16384
+    slots: 1
+
+short_prompt: >-
+  請用三到五句話說明什麼是連續批次處理（continuous batching），並舉一個實際應用情境。
+
+vram:
+  poll_interval_sec: 0.5
+  baseline_warn_threshold_mb: 2048
+
+paths:
+  raw_results_dir: "bench/results/raw"
+  summary_dir: "bench/results"
+  calibrated_prompts_dir: "bench/results/prompts"

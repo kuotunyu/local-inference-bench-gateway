@@ -1,0 +1,15 @@
+{
+  "direct": {
+    "label": "direct",
+    "ttft_median_ms": 9.736549989611376,
+    "ttft_p95_ms": 10.136199998669326,
+    "total_median_ms": 16.875050001544878
+  },
+  "via_gateway": {
+    "label": "via-gateway",
+    "ttft_median_ms": 11.393250009859912,
+    "ttft_p95_ms": 11.785700000473298,
+    "total_median_ms": 18.474699994840194
+  },
+  "overhead_ms": 1.656700020248536
+}

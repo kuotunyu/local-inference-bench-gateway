@@ -1,0 +1,32 @@
+# Model registry: alias -> ordered list of backends (first = primary, rest = failover targets).
+# Phase 3 routes to the primary only; Phase 4 adds the failover walk down this same list.
+#
+# "fast" demonstrates the Part A benchmark setup (same GGUF on two engines); "smart" demonstrates
+# routing a different, larger model through Ollama -- the two use cases named in the original
+# project brief ("fast" -> llama-server, "smart" -> a bigger Ollama model).
+#
+# max_concurrent caps in-flight requests per alias; the gateway rejects with 429 instead of
+# queueing once the cap is hit (see gateway/concurrency.py and PRODUCTION_SCALING.md). Omit the
+# field (as "smart" does below) for no limit. 4 here is deliberately low so a handful of
+# concurrent requests is enough to demonstrate it -- not a claim about llama-server's real
+# capacity (Part A benchmarked it cleanly up to 16, see EVAL_REPORT.md).
+
+models:
+  fast:
+    max_concurrent: 4
+    backends:
+      - name: llamacpp
+        base_url: "http://127.0.0.1:8080/v1"
+        model: "bench-model"
+        api_key: null
+      - name: ollama
+        base_url: "http://127.0.0.1:11434/v1"
+        model: "bench-model-c"
+        api_key: "ollama"
+
+  smart:
+    backends:
+      - name: ollama-smart
+        base_url: "http://127.0.0.1:11434/v1"
+        model: "qwen3:8b"
+        api_key: "ollama"
