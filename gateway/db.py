@@ -17,6 +17,11 @@ from starlette.concurrency import run_in_threadpool
 
 DEFAULT_DB_PATH = Path("data/gateway.db")
 
+
+class LogWriteError(Exception):
+    """A recoverable SQLite write failure at the telemetry boundary."""
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,6 +47,10 @@ CREATE TABLE IF NOT EXISTS failover_events (
     next_backend TEXT,
     reason TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_requests_timestamp ON requests(timestamp);
+CREATE INDEX IF NOT EXISTS idx_failover_events_timestamp ON failover_events(timestamp);
+PRAGMA user_version = 1;
 """
 
 
@@ -49,10 +58,17 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _connect(path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(str(path), timeout=10.0)
+    conn.execute("PRAGMA busy_timeout = 10000")
+    return conn
+
+
 def init_db(path: Path = DEFAULT_DB_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    conn = _connect(path)
     try:
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA)
         conn.commit()
     finally:
@@ -60,7 +76,7 @@ def init_db(path: Path = DEFAULT_DB_PATH) -> None:
 
 
 def _write_request(path: Path, fields: dict) -> None:
-    conn = sqlite3.connect(str(path))
+    conn = _connect(path)
     try:
         conn.execute(
             """
@@ -106,11 +122,14 @@ async def log_request(
         "total_latency_ms": total_latency_ms,
         "error_message": error_message,
     }
-    await run_in_threadpool(_write_request, path, fields)
+    try:
+        await run_in_threadpool(_write_request, path, fields)
+    except sqlite3.Error as exc:
+        raise LogWriteError("request_log_write_failed") from exc
 
 
 def _write_failover_event(path: Path, fields: dict) -> None:
-    conn = sqlite3.connect(str(path))
+    conn = _connect(path)
     try:
         conn.execute(
             """
@@ -134,4 +153,7 @@ async def log_failover_event(
         "next_backend": next_backend,
         "reason": reason,
     }
-    await run_in_threadpool(_write_failover_event, path, fields)
+    try:
+        await run_in_threadpool(_write_failover_event, path, fields)
+    except sqlite3.Error as exc:
+        raise LogWriteError("failover_log_write_failed") from exc

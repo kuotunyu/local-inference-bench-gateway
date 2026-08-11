@@ -9,6 +9,7 @@ ships with .env.example: copy it, set a real key, and auth turns on automaticall
 from __future__ import annotations
 
 import os
+import secrets
 
 from fastapi import Header, HTTPException
 
@@ -33,7 +34,7 @@ async def verify_api_key(authorization: str | None = Header(default=None)) -> No
         )
 
     token = authorization.removeprefix("Bearer ").strip()
-    if token != expected:
+    if not secrets.compare_digest(token, expected):
         raise HTTPException(
             status_code=401,
             detail={

@@ -17,7 +17,9 @@ SIMPLE_RESPONSE = {
     "object": "chat.completion",
     "created": 0,
     "model": "model-d",
-    "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+    "choices": [
+        {"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}
+    ],
     "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
 }
 
@@ -76,12 +78,20 @@ async def test_unlimited_alias_has_no_cap(gateway_client):
                 "object": "chat.completion",
                 "created": 0,
                 "model": "model-a",
-                "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "ok"},
+                        "finish_reason": "stop",
+                    }
+                ],
                 "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
             },
         )
     )
 
     payload = {"model": "test-alias", "messages": [{"role": "user", "content": "hi"}]}
-    results = await asyncio.gather(*(gateway_client.post("/v1/chat/completions", json=payload) for _ in range(10)))
+    results = await asyncio.gather(
+        *(gateway_client.post("/v1/chat/completions", json=payload) for _ in range(10))
+    )
     assert all(r.status_code == 200 for r in results)

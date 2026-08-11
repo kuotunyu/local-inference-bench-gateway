@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx
 
@@ -30,7 +30,9 @@ class RequestResult:
     success: bool
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
-    completion_tokens_source: str | None = None  # "usage" or "chunk_count" -- see stream_chat_completion
+    completion_tokens_source: str | None = (
+        None  # "usage" or "chunk_count" -- see stream_chat_completion
+    )
     ttft_s: float | None = None
     total_time_s: float | None = None
     tokens_per_sec: float | None = None
@@ -131,9 +133,7 @@ async def stream_chat_completion(
                         finish_reason = fr
 
     except httpx.TimeoutException as e:
-        return RequestResult(
-            engine=engine_label, model=model, success=False, error=f"timeout: {e}"
-        )
+        return RequestResult(engine=engine_label, model=model, success=False, error=f"timeout: {e}")
     except httpx.HTTPError as e:
         return RequestResult(
             engine=engine_label, model=model, success=False, error=f"http_error: {e}"

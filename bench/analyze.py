@@ -50,7 +50,9 @@ def build_concurrency_summary(raw_dir: Path) -> pd.DataFrame:
             by_c.setdefault(r["concurrency"], []).append(r)
 
         for concurrency, batches in sorted(by_c.items()):
-            agg_tok_s = [b["aggregate_tokens_per_sec"] for b in batches if b.get("aggregate_tokens_per_sec")]
+            agg_tok_s = [
+                b["aggregate_tokens_per_sec"] for b in batches if b.get("aggregate_tokens_per_sec")
+            ]
             all_ttft = [
                 req["ttft_s"]
                 for b in batches
@@ -69,15 +71,21 @@ def build_concurrency_summary(raw_dir: Path) -> pd.DataFrame:
                     "n_runs": len(batches),
                     "n_requests_total": n_total,
                     "n_failed": n_failed,
-                    "median_aggregate_tok_s": float(np.median(agg_tok_s)) if agg_tok_s else float("nan"),
+                    "median_aggregate_tok_s": float(np.median(agg_tok_s))
+                    if agg_tok_s
+                    else float("nan"),
                     "p50_ttft_s": _pct(all_ttft, 50),
                     "p95_ttft_s": _pct(all_ttft, 95),
                     "p99_ttft_s": _pct(all_ttft, 99),
-                    "median_vram_peak_delta_mb": float(np.median(vram_deltas)) if vram_deltas else float("nan"),
+                    "median_vram_peak_delta_mb": float(np.median(vram_deltas))
+                    if vram_deltas
+                    else float("nan"),
                     # This is the resident model+runtime footprint (baseline is sampled AFTER the
                     # engine's model is already loaded), not incremental KV growth during a batch --
                     # the meaningful cross-engine VRAM comparison, see plot_vram().
-                    "median_vram_baseline_mb": float(np.median(vram_baselines)) if vram_baselines else float("nan"),
+                    "median_vram_baseline_mb": float(np.median(vram_baselines))
+                    if vram_baselines
+                    else float("nan"),
                 }
             )
     return pd.DataFrame(rows)
@@ -107,7 +115,9 @@ def build_prefill_summary(raw_dir: Path) -> pd.DataFrame:
                     "median_ttft_s": float(np.median(ttfts)) if ttfts else float("nan"),
                     "p50_ttft_s": _pct(ttfts, 50),
                     "p95_ttft_s": _pct(ttfts, 95),
-                    "median_vram_peak_delta_mb": float(np.median(vram_deltas)) if vram_deltas else float("nan"),
+                    "median_vram_peak_delta_mb": float(np.median(vram_deltas))
+                    if vram_deltas
+                    else float("nan"),
                 }
             )
     return pd.DataFrame(rows)
@@ -199,7 +209,11 @@ def plot_vram(concurrency_df: pd.DataFrame, out_path: Path) -> None:
     # delta stays near zero for this workload (max_tokens=256 barely grows the KV cache), so it
     # isn't chart-worthy on its own.
     max_c = concurrency_df["concurrency"].max() if not concurrency_df.empty else None
-    sub = concurrency_df[concurrency_df["concurrency"] == max_c] if max_c else concurrency_df.iloc[0:0]
+    sub = (
+        concurrency_df[concurrency_df["concurrency"] == max_c]
+        if max_c
+        else concurrency_df.iloc[0:0]
+    )
 
     fig, ax = plt.subplots(figsize=(6, 5))
     engines = [e for e in ENGINE_ORDER if e in sub["engine"].values]

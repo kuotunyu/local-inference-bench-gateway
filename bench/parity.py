@@ -90,7 +90,9 @@ async def run_parity_check(config_path: str = "bench/config.yaml") -> bool:
         )
         ok = False
     elif ok:
-        print(f"\n[PASS] All engines agree on prompt_tokens = {next(iter(prompt_token_values.values()))}")
+        print(
+            f"\n[PASS] All engines agree on prompt_tokens = {next(iter(prompt_token_values.values()))}"
+        )
 
     return ok
 

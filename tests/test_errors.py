@@ -8,7 +8,9 @@ import respx
 
 @respx.mock
 async def test_backend_timeout_returns_504(gateway_client):
-    respx.post("http://only.test/v1/chat/completions").mock(side_effect=httpx.ReadTimeout("timed out"))
+    respx.post("http://only.test/v1/chat/completions").mock(
+        side_effect=httpx.ReadTimeout("timed out")
+    )
 
     resp = await gateway_client.post(
         "/v1/chat/completions",
@@ -23,7 +25,7 @@ async def test_backend_timeout_returns_504(gateway_client):
 
 
 @respx.mock
-async def test_non_json_upstream_body_is_wrapped_not_crashed(gateway_client):
+async def test_non_json_upstream_body_is_a_safe_502(gateway_client):
     respx.post("http://only.test/v1/chat/completions").mock(
         return_value=httpx.Response(200, content=b"<html>not json</html>")
     )
@@ -33,10 +35,75 @@ async def test_non_json_upstream_body_is_wrapped_not_crashed(gateway_client):
         json={"model": "single-backend", "messages": [{"role": "user", "content": "hi"}]},
     )
 
-    assert resp.status_code == 200
+    assert resp.status_code == 502
     body = resp.json()
     assert body["error"]["type"] == "api_error"
-    assert "not json" in body["error"]["message"]
+    assert body["error"]["code"] == "upstream_unavailable"
+    assert "not json" not in body["error"]["message"]
+
+
+@respx.mock
+async def test_streaming_non_json_upstream_error_is_sanitized(gateway_client):
+    private_body = "internal proxy at 10.20.30.40/private-token"
+    respx.post("http://only.test/v1/chat/completions").mock(
+        return_value=httpx.Response(503, text=private_body)
+    )
+
+    resp = await gateway_client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "single-backend",
+            "stream": True,
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+
+    assert resp.status_code == 503
+    assert private_body not in resp.text
+    assert resp.json()["error"] == {
+        "message": "Upstream backend returned a non-JSON error response.",
+        "type": "api_error",
+        "param": None,
+        "code": "upstream_protocol_error",
+    }
+
+
+@respx.mock
+async def test_streaming_non_object_upstream_error_is_sanitized(gateway_client):
+    respx.post("http://only.test/v1/chat/completions").mock(
+        return_value=httpx.Response(503, json=["internal", "details"])
+    )
+
+    resp = await gateway_client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "single-backend",
+            "stream": True,
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "upstream_protocol_error"
+
+
+@respx.mock
+async def test_streaming_non_utf8_upstream_error_is_sanitized(gateway_client):
+    respx.post("http://only.test/v1/chat/completions").mock(
+        return_value=httpx.Response(503, content=b"\xff")
+    )
+
+    resp = await gateway_client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "single-backend",
+            "stream": True,
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "upstream_protocol_error"
 
 
 async def test_all_error_responses_share_openai_envelope_shape(gateway_client):

@@ -33,6 +33,14 @@ FINAL_READ_TIMEOUT_S = 120.0
 HEALTH_CHECK_TIMEOUT_S = 3.0
 
 
+def safe_failure_reason(exc: Exception) -> str:
+    if isinstance(exc, backend_io.BackendTimeout):
+        return "timeout"
+    if isinstance(exc, backend_io.BackendProtocolError):
+        return "protocol_error"
+    return "connection_error"
+
+
 def _timeout_for(is_last: bool) -> httpx.Timeout:
     read = FINAL_READ_TIMEOUT_S if is_last else FAILOVER_READ_TIMEOUT_S
     return httpx.Timeout(connect=5.0, read=read, write=10.0, pool=5.0)
@@ -43,6 +51,10 @@ class AllBackendsFailedError(Exception):
         self.attempts = attempts  # [(backend_name, reason), ...]
         summary = "; ".join(f"{name}: {reason}" for name, reason in attempts)
         super().__init__(f"All backends failed: {summary}")
+
+    @property
+    def last_reason(self) -> str:
+        return self.attempts[-1][1] if self.attempts else "upstream_unavailable"
 
 
 OnFailover = Callable[[str, str | None, str], Awaitable[None]]
@@ -61,8 +73,12 @@ async def forward_non_streaming_with_failover(
             status, content = await backend_io.forward_non_streaming(
                 client, backend, client_body, timeout=_timeout_for(is_last)
             )
-        except (backend_io.BackendUnavailable, backend_io.BackendTimeout) as e:
-            reason = str(e) or type(e).__name__
+        except (
+            backend_io.BackendUnavailable,
+            backend_io.BackendTimeout,
+            backend_io.BackendProtocolError,
+        ) as e:
+            reason = safe_failure_reason(e)
             attempts.append((backend.name, reason))
             if is_last:
                 raise AllBackendsFailedError(attempts) from e
@@ -94,9 +110,11 @@ async def open_stream_with_failover(
     for i, backend in enumerate(chain):
         is_last = i == len(chain) - 1
         try:
-            handle = await backend_io.open_stream(client, backend, client_body, timeout=_timeout_for(is_last))
+            handle = await backend_io.open_stream(
+                client, backend, client_body, timeout=_timeout_for(is_last)
+            )
         except (backend_io.BackendUnavailable, backend_io.BackendTimeout) as e:
-            reason = str(e) or type(e).__name__
+            reason = safe_failure_reason(e)
             attempts.append((backend.name, reason))
             if is_last:
                 raise AllBackendsFailedError(attempts) from e
@@ -129,7 +147,9 @@ class BackendHealth:
 class HealthChecker:
     """Polls every unique backend base_url on a timer; read-only status for the dashboard."""
 
-    def __init__(self, client: httpx.AsyncClient, backend_urls: list[str], interval_s: float = 10.0):
+    def __init__(
+        self, client: httpx.AsyncClient, backend_urls: list[str], interval_s: float = 10.0
+    ):
         self.client = client
         self.backend_urls = backend_urls
         self.interval_s = interval_s

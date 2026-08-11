@@ -30,6 +30,10 @@ class BackendTimeout(Exception):
     """Backend did not respond within the configured timeout."""
 
 
+class BackendProtocolError(Exception):
+    """Backend returned a response that is not a usable OpenAI JSON object."""
+
+
 def _build_upstream_request(backend: Backend, client_body: dict) -> tuple[str, dict, dict]:
     url = f"{backend.base_url.rstrip('/')}/chat/completions"
     headers = {"Content-Type": "application/json"}
@@ -56,8 +60,10 @@ async def forward_non_streaming(
         raise BackendTimeout(str(e)) from e
     try:
         content = resp.json()
-    except json.JSONDecodeError:
-        content = {"error": {"message": resp.text[:2000], "type": "api_error"}}
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise BackendProtocolError("non_json_response") from exc
+    if not isinstance(content, dict):
+        raise BackendProtocolError("non_object_response")
     return resp.status_code, content
 
 
@@ -113,7 +119,7 @@ async def forward_stream_chunks(
                     chunk = json.loads(data)
                 except json.JSONDecodeError:
                     chunk = None
-                if chunk is not None:
+                if isinstance(chunk, dict):
                     usage = chunk.get("usage")
                     choices = chunk.get("choices")
                     if usage:

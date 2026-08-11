@@ -12,6 +12,23 @@ from __future__ import annotations
 from fastapi.responses import JSONResponse
 
 
+def error_content(
+    message: str,
+    error_type: str,
+    *,
+    param: str | None = None,
+    code: str | None = None,
+) -> dict:
+    return {
+        "error": {
+            "message": message,
+            "type": error_type,
+            "param": param,
+            "code": code,
+        }
+    }
+
+
 def openai_error(
     status_code: int,
     message: str,
@@ -24,14 +41,7 @@ def openai_error(
     return JSONResponse(
         status_code=status_code,
         headers=headers,
-        content={
-            "error": {
-                "message": message,
-                "type": error_type,
-                "param": param,
-                "code": code,
-            }
-        },
+        content=error_content(message, error_type, param=param, code=code),
     )
 
 
@@ -59,10 +69,29 @@ def invalid_json() -> JSONResponse:
     return openai_error(400, "Request body is not valid JSON.", "invalid_request_error")
 
 
-def upstream_unavailable(backend_name: str, detail: str) -> JSONResponse:
+def invalid_request_body() -> JSONResponse:
+    return openai_error(
+        400,
+        "Request body must be a JSON object.",
+        "invalid_request_error",
+        code="invalid_request_body",
+    )
+
+
+def invalid_field(field: str, expected: str) -> JSONResponse:
+    return openai_error(
+        400,
+        f"Field '{field}' must be {expected}.",
+        "invalid_request_error",
+        param=field,
+        code="invalid_field",
+    )
+
+
+def upstream_unavailable(alias: str) -> JSONResponse:
     return openai_error(
         502,
-        f"Upstream backend '{backend_name}' is unavailable: {detail}",
+        f"No upstream backend is available for model '{alias}'.",
         "api_error",
         code="upstream_unavailable",
     )
@@ -74,6 +103,14 @@ def upstream_timeout(backend_name: str) -> JSONResponse:
         f"Upstream backend '{backend_name}' timed out.",
         "api_error",
         code="upstream_timeout",
+    )
+
+
+def upstream_protocol_error_content() -> dict:
+    return error_content(
+        "Upstream backend returned a non-JSON error response.",
+        "api_error",
+        code="upstream_protocol_error",
     )
 
 

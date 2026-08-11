@@ -116,17 +116,35 @@ async def run_concurrency_sweep(engine_name: str, config: dict, out_path: Path) 
 
     async with httpx.AsyncClient(limits=httpx.Limits(max_connections=64)) as client:
         for concurrency in config["concurrency_levels"]:
-            print(f"[{engine_name}] concurrency={concurrency}: warming up ({warmup_runs} batches)...")
+            print(
+                f"[{engine_name}] concurrency={concurrency}: warming up ({warmup_runs} batches)..."
+            )
             for i in range(warmup_runs):
                 await _run_concurrency_batch(
-                    client, engine_name, engine_cfg, model, sampling, system_prompt, short_prompt, concurrency
+                    client,
+                    engine_name,
+                    engine_cfg,
+                    model,
+                    sampling,
+                    system_prompt,
+                    short_prompt,
+                    concurrency,
                 )
 
-            print(f"[{engine_name}] concurrency={concurrency}: timed runs ({timed_runs} batches)...")
+            print(
+                f"[{engine_name}] concurrency={concurrency}: timed runs ({timed_runs} batches)..."
+            )
             for i in range(timed_runs):
                 async with VramPoller(vram_cfg["poll_interval_sec"]) as poller:
                     batch = await _run_concurrency_batch(
-                        client, engine_name, engine_cfg, model, sampling, system_prompt, short_prompt, concurrency
+                        client,
+                        engine_name,
+                        engine_cfg,
+                        model,
+                        sampling,
+                        system_prompt,
+                        short_prompt,
+                        concurrency,
                     )
                 vram = poller.summary()
 

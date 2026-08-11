@@ -142,7 +142,9 @@ async def main():
             tolerance_pct=config["prompt_tolerance_pct"],
         )
         deviation_pct = abs(actual - target) / target * 100
-        print(f"  -> actual prompt_tokens={actual} (target {target}, deviation {deviation_pct:.2f}%)")
+        print(
+            f"  -> actual prompt_tokens={actual} (target {target}, deviation {deviation_pct:.2f}%)"
+        )
 
         out_path = out_dir / f"prompt_{target}.json"
         out_path.write_text(

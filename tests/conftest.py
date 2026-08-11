@@ -36,7 +36,7 @@ TEST_REGISTRY_DATA = {
             "max_concurrent": 2,
             "backends": [
                 {"name": "limited", "base_url": "http://limited.test/v1", "model": "model-d"},
-            ]
+            ],
         },
     }
 }

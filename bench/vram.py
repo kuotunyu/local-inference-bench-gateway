@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 def query_used_mb() -> float:

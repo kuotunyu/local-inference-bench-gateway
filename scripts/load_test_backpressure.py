@@ -47,7 +47,9 @@ async def main():
             print("Gateway not reachable at http://127.0.0.1:9000 -- start it first.")
             return
 
-        print(f"Firing {n} concurrent requests at alias 'fast' (max_concurrent=4 in models.yaml)...")
+        print(
+            f"Firing {n} concurrent requests at alias 'fast' (max_concurrent=4 in models.yaml)..."
+        )
         t0 = time.perf_counter()
         results = await asyncio.gather(*(one_request(client, i) for i in range(n)))
         total_s = time.perf_counter() - t0
@@ -56,10 +58,12 @@ async def main():
     n_429 = sum(1 for status, _, _ in results if status == 429)
     n_other = n - n_200 - n_429
 
-    print(f"\nCompleted in {total_s:.2f}s: {n_200} succeeded (200), {n_429} rejected (429), {n_other} other")
+    print(
+        f"\nCompleted in {total_s:.2f}s: {n_200} succeeded (200), {n_429} rejected (429), {n_other} other"
+    )
     for i, (status, elapsed, extra) in enumerate(results):
         tag = f"Retry-After={extra}" if status == 429 else (extra or "")
-        print(f"  req {i:2d}: status={status:4d}  {elapsed*1000:7.1f}ms  {tag}")
+        print(f"  req {i:2d}: status={status:4d}  {elapsed * 1000:7.1f}ms  {tag}")
 
     if n_429 > 0:
         print(

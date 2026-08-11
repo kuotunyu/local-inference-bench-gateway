@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 
 async def test_health(gateway_client):
     resp = await gateway_client.get("/health")
@@ -45,3 +47,44 @@ async def test_invalid_json_body_returns_400(gateway_client):
     )
     assert resp.status_code == 400
     assert resp.json()["error"]["type"] == "invalid_request_error"
+
+
+async def test_non_object_json_body_returns_openai_error(gateway_client):
+    resp = await gateway_client.post("/v1/chat/completions", json=[])
+
+    assert resp.status_code == 400
+    assert resp.json()["error"] == {
+        "message": "Request body must be a JSON object.",
+        "type": "invalid_request_error",
+        "param": None,
+        "code": "invalid_request_body",
+    }
+
+
+async def test_invalid_utf8_json_body_returns_400(gateway_client):
+    resp = await gateway_client.post(
+        "/v1/chat/completions", content=b"\xff", headers={"Content-Type": "application/json"}
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["error"]["type"] == "invalid_request_error"
+
+
+@pytest.mark.parametrize("invalid_model", [[], {}, 123])
+async def test_non_string_model_field_returns_400(gateway_client, invalid_model):
+    resp = await gateway_client.post(
+        "/v1/chat/completions", json={"model": invalid_model, "messages": []}
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["error"]["param"] == "model"
+
+
+async def test_non_object_stream_options_returns_400(gateway_client):
+    resp = await gateway_client.post(
+        "/v1/chat/completions",
+        json={"model": "test-alias", "stream": True, "stream_options": [], "messages": []},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["error"]["param"] == "stream_options"
