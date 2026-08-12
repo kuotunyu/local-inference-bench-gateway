@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pandas as pd
@@ -61,7 +62,7 @@ def inspect_schema(path: Path) -> SchemaStatus:
     if not path.is_file():
         return SchemaStatus(False, None, "database_missing")
     try:
-        with _connect_read_only(path) as conn:
+        with closing(_connect_read_only(path)) as conn:
             version = int(conn.execute("PRAGMA user_version").fetchone()[0])
             requests_ok = set(REQUEST_COLUMNS) <= _table_columns(conn, "requests")
             failovers_ok = set(FAILOVER_COLUMNS) <= _table_columns(conn, "failover_events")
@@ -83,7 +84,7 @@ def load_snapshot(path: Path) -> TelemetrySnapshot:
         version = "unknown" if status.detected_version is None else status.detected_version
         raise IncompatibleSchema(f"不支援的 telemetry schema version {version}；預期為 1")
     try:
-        with _connect_read_only(path) as conn:
+        with closing(_connect_read_only(path)) as conn:
             requests = pd.read_sql_query("SELECT * FROM requests ORDER BY id DESC", conn).reindex(
                 columns=REQUEST_COLUMNS
             )
