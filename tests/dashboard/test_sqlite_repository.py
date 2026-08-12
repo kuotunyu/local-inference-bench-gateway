@@ -42,3 +42,14 @@ def test_incompatible_schema_is_reported_without_mutation(tmp_path: Path) -> Non
     assert status.detected_version == 0
     with pytest.raises(IncompatibleSchema, match="schema version 0"):
         load_snapshot(path)
+
+
+def test_unreadable_database_is_temporarily_unavailable(tmp_path: Path) -> None:
+    path = tmp_path / "locked-or-corrupt.db"
+    path.write_bytes(b"not a sqlite database")
+
+    status = inspect_schema(path)
+
+    assert status.reason == "database_unreadable"
+    with pytest.raises(TelemetryUnavailable, match="Live telemetry"):
+        load_snapshot(path)

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from dashboard.data.benchmark_repository import load_benchmark_evidence
-from dashboard.views.evidence import build_evidence_view_model
+from dashboard.views.evidence import build_evidence_view_model, render_evidence
 
 
 def test_benchmark_model_includes_scope_and_environment() -> None:
@@ -10,3 +10,16 @@ def test_benchmark_model_includes_scope_and_environment() -> None:
     assert model.gpu == "NVIDIA GeForce RTX 4090"
     assert "硬體、版本與 workload" in model.scope_note
     assert model.public_raw_runs is False
+
+
+def test_missing_evidence_artifacts_degrade_without_exception(tmp_path: Path) -> None:
+    evidence = load_benchmark_evidence(tmp_path)
+
+    model = build_evidence_view_model(evidence)
+
+    render_evidence(evidence)
+
+    assert evidence.warnings
+    assert evidence.provenance == {}
+    assert model.public_raw_runs is None
+    assert model.measurement_date == "—"

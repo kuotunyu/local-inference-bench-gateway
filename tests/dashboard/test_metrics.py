@@ -21,6 +21,25 @@ def test_compute_overview_preserves_missing_ttft() -> None:
     assert result.success_rate_pct == 50.0
     assert result.p50_latency_ms == 500.0
     assert result.p50_ttft_ms is None
+    assert result.failover_rate_pct == 0.0
+    assert result.prompt_tokens is None
+
+
+def test_request_rate_uses_selected_observation_window() -> None:
+    requests = pd.DataFrame(
+        [
+            {"timestamp": "2026-08-13T00:00:00Z"},
+            {"timestamp": "2026-08-13T00:00:01Z"},
+        ]
+    )
+
+    result = compute_overview(
+        requests,
+        pd.DataFrame(columns=["id"]),
+        observation_window_minutes=60,
+    )
+
+    assert result.request_rate_per_min == pytest.approx(2 / 60)
 
 
 @pytest.mark.parametrize(

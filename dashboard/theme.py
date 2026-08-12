@@ -38,20 +38,20 @@ h1, h2, h3 { color: var(--ink); letter-spacing: -.035em; }
 h1 { font-size: clamp(2rem, 3.3vw, 3.55rem) !important; line-height: 1.06 !important; }
 h2 { font-size: clamp(1.45rem, 2vw, 2rem) !important; }
 h3 { font-size: 1.12rem !important; }
-.ops-kicker { color: #60736A; font-size: .78rem; letter-spacing: .16em; font-weight: 800; }
+.ops-kicker { color: #60736A; font-size: .8125rem; letter-spacing: .16em; font-weight: 800; }
 .ops-title { margin: .35rem 0 .45rem; font-size: clamp(2rem, 3.3vw, 3.55rem); line-height: 1.06; font-weight: 850; letter-spacing: -.045em; }
 .ops-lede { max-width: 52rem; color: var(--ink-muted); font-size: 1.05rem; }
 .ops-rule { height: 1px; background: linear-gradient(90deg, #87998F, transparent); margin: 1.2rem 0 1.1rem; }
 .source-line { display:flex; gap:.65rem; align-items:center; flex-wrap:wrap; margin:.2rem 0 1rem; }
-.source-badge { display:inline-flex; align-items:center; gap:.42rem; border-radius:999px; padding:.38rem .7rem; font-size:.78rem; font-weight:800; letter-spacing:.06em; }
+.source-badge { display:inline-flex; align-items:center; gap:.42rem; border-radius:999px; padding:.38rem .7rem; font-size:.8125rem; font-weight:800; letter-spacing:.06em; }
 .source-badge.demo { background:#F0DFC8; color:#715A3F; }
 .source-badge.live { background:#DCE7DE; color:#355044; }
 .source-badge.evidence { background:#DDE5E8; color:#405B65; }
 .source-note { color:var(--ink-muted); font-size:.88rem; }
 .metric-card { min-height: 126px; padding: 1.05rem 1.08rem; border:1px solid var(--border); border-radius:16px; background:rgba(255,253,249,.9); box-shadow:0 8px 24px rgba(38,50,44,.045); }
-.metric-label { color:var(--ink-muted); font-size:.72rem; font-weight:800; letter-spacing:.1em; }
+.metric-label { color:var(--ink-muted); font-size:.8125rem; font-weight:800; letter-spacing:.1em; }
 .metric-value { margin:.45rem 0 .15rem; color:var(--ink); font-size:clamp(1.5rem,2.3vw,2.2rem); font-weight:820; line-height:1.1; font-variant-numeric:tabular-nums; }
-.metric-detail { color:var(--ink-muted); font-size:.8rem; }
+.metric-detail { color:var(--ink-muted); font-size:.875rem; }
 .status-card { padding:1rem 1.05rem; border:1px solid var(--border); border-radius:14px; background:var(--surface); }
 .status-card strong { font-size:1rem; }
 .status-dot { display:inline-block; width:.58rem; height:.58rem; border-radius:50%; margin-right:.45rem; }

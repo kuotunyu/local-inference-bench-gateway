@@ -26,15 +26,32 @@ def fetch_gateway_status(
             response.raise_for_status()
             backends: dict[str, dict] = {}
             reason = None
-            if api_key:
+            headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+            try:
                 health = client.get(
                     f"{base_url.rstrip('/')}/health/backends",
-                    headers={"Authorization": f"Bearer {api_key}"},
+                    headers=headers,
                 )
-                if health.status_code == 200 and isinstance(health.json(), dict):
-                    backends = health.json()
+                if health.status_code == 200:
+                    content = health.json()
+                    if isinstance(content, dict):
+                        backends = {
+                            str(url): entry
+                            for url, entry in content.items()
+                            if isinstance(entry, dict)
+                        }
+                        if len(backends) != len(content):
+                            reason = "backend_health_protocol_error"
+                    else:
+                        reason = "backend_health_protocol_error"
                 elif health.status_code in {401, 403}:
                     reason = "backend_health_unauthorized"
+                else:
+                    reason = "backend_health_unavailable"
+            except httpx.TimeoutException:
+                reason = "backend_health_timeout"
+            except (httpx.HTTPError, ValueError):
+                reason = "backend_health_unavailable"
             return GatewayStatus(True, checked_at, backends, reason)
     except httpx.TimeoutException:
         return GatewayStatus(False, checked_at, {}, "timeout")

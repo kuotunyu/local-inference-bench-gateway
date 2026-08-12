@@ -31,3 +31,12 @@ def test_unavailable_live_mode_degrades_to_demo(tmp_path: Path, monkeypatch) -> 
     assert not app.exception
     assert not live.exists()
     assert any("安全切換 Demo Mode" in item.value for item in app.markdown)
+
+
+def test_missing_registry_does_not_block_evidence(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GATEWAY_MODELS_PATH", str(tmp_path / "missing-models.yaml"))
+    app = AppTest.from_file(str(APP_PATH)).run(timeout=20)
+    app.radio[0].set_value("Benchmark Evidence").run(timeout=20)
+
+    assert not app.exception
+    assert any("BENCHMARK EVIDENCE" in item.value for item in app.markdown)

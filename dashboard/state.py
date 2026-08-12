@@ -36,7 +36,9 @@ def load_telemetry_state(
             return AppTelemetryState(
                 snapshot,
                 "demo",
-                f"Live Mode 暫時無法使用，已安全切換 Demo Mode。{exc}",
+                "Live Mode 暫時無法使用，已安全切換 Demo Mode。"
+                f"{exc}。請先執行 `uv run gateway`，並確認 `GATEWAY_DB_PATH` 指向 gateway 寫入的 SQLite；"
+                "修正後再切回 Live Mode，不需刪除或重建現有資料庫。",
             )
     return AppTelemetryState(load_snapshot(ensure_demo_database(demo_directory)), "demo")
 

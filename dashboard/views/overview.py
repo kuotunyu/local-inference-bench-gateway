@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
 
 from dashboard.components import (
+    escape_html,
     format_metric,
     render_metric_card,
     render_page_heading,
@@ -19,6 +21,8 @@ from dashboard.data.live_status import GatewayStatus
 from dashboard.metrics import OverviewMetrics, bucket_request_series, compute_overview
 from dashboard.models import TelemetrySnapshot
 from gateway.registry import Registry
+
+DISPLAY_TIMEZONE = ZoneInfo("Asia/Taipei")
 
 
 @dataclass(frozen=True)
@@ -37,13 +41,21 @@ def _bounds(frame: pd.DataFrame) -> tuple[datetime | None, datetime | None]:
     return values.min().to_pydatetime(), values.max().to_pydatetime()
 
 
-def build_overview_model(snapshot: TelemetrySnapshot, source_kind: str) -> OverviewModel:
+def build_overview_model(
+    snapshot: TelemetrySnapshot,
+    source_kind: str,
+    observation_window_minutes: int | None = None,
+) -> OverviewModel:
     observed_from, observed_to = _bounds(snapshot.requests)
     return OverviewModel(
         source_label="DEMO DATA" if source_kind == "demo" else "LIVE",
         observed_from=observed_from,
         observed_to=observed_to,
-        metrics=compute_overview(snapshot.requests, snapshot.failovers),
+        metrics=compute_overview(
+            snapshot.requests,
+            snapshot.failovers,
+            observation_window_minutes=observation_window_minutes,
+        ),
         series=bucket_request_series(snapshot.requests),
     )
 
@@ -51,9 +63,9 @@ def build_overview_model(snapshot: TelemetrySnapshot, source_kind: str) -> Overv
 def _time_note(model: OverviewModel) -> str:
     if model.observed_from is None or model.observed_to is None:
         return "目前 observation window 尚無 request telemetry"
-    start = model.observed_from.astimezone().strftime("%Y/%m/%d %H:%M")
-    end = model.observed_to.astimezone().strftime("%H:%M %Z")
-    return f"Observation window · {start}–{end}"
+    start = model.observed_from.astimezone(DISPLAY_TIMEZONE).strftime("%Y/%m/%d %H:%M")
+    end = model.observed_to.astimezone(DISPLAY_TIMEZONE).strftime("%H:%M")
+    return f"Observation window · {start}–{end} UTC+8"
 
 
 def _render_health(status: GatewayStatus) -> None:
@@ -68,7 +80,7 @@ def _render_health(status: GatewayStatus) -> None:
     if not status.backends:
         render_state_message(
             "Gateway reachable",
-            "Backend Health 需要有效的 API key；目前不推測 backend 狀態。",
+            f"Backend Health 暫時無法取得（{status.reason}）；目前不推測 backend 狀態。",
         )
         return
     for url, health in status.backends.items():
@@ -78,7 +90,8 @@ def _render_health(status: GatewayStatus) -> None:
         name = url.split("//")[-1].split("/")[0]
         st.markdown(
             f'<div class="status-card"><span class="status-dot {tone}"></span>'
-            f"<strong>{name}</strong><br><small>{label} · current probe</small></div>",
+            f"<strong>{escape_html(name)}</strong><br>"
+            f"<small>{escape_html(label)} · current probe</small></div>",
             unsafe_allow_html=True,
         )
 
@@ -88,8 +101,9 @@ def render_overview(
     source_kind: str,
     status: GatewayStatus,
     registry: Registry,
+    observation_window_minutes: int | None = None,
 ) -> None:
-    model = build_overview_model(snapshot, source_kind)
+    model = build_overview_model(snapshot, source_kind, observation_window_minutes)
     render_page_heading(
         "GATEWAY OVERVIEW",
         "推論系統，一眼掌握。",
@@ -103,7 +117,15 @@ def render_overview(
     metrics = model.metrics
     columns = st.columns(5)
     cards = [
-        ("REQUEST VOLUME", f"{metrics.request_count:,}", "selected window"),
+        (
+            "REQUEST VOLUME",
+            f"{metrics.request_count:,}",
+            (
+                "selected window"
+                if metrics.request_rate_per_min is None
+                else f"{metrics.request_rate_per_min:,.1f} req/min"
+            ),
+        ),
         (
             "SUCCESS RATE",
             format_metric(metrics.success_rate_pct, "%", digits=1),
@@ -111,7 +133,11 @@ def render_overview(
         ),
         ("P50 LATENCY", format_metric(metrics.p50_latency_ms, " ms", digits=0), "total latency"),
         ("P95 LATENCY", format_metric(metrics.p95_latency_ms, " ms", digits=0), "total latency"),
-        ("FAILOVER EVENTS", f"{metrics.failover_count:,}", "observed transitions"),
+        (
+            "FAILOVER EVENTS",
+            f"{metrics.failover_count:,}",
+            format_metric(metrics.failover_rate_pct, "% of requests", digits=2),
+        ),
     ]
     for column, card in zip(columns, cards, strict=True):
         with column:

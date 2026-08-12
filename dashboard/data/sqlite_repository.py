@@ -80,6 +80,8 @@ def load_snapshot(path: Path) -> TelemetrySnapshot:
     status = inspect_schema(path)
     if status.detected_version is None and not path.is_file():
         raise TelemetryUnavailable(f"找不到 Live telemetry：{path}")
+    if status.reason == "database_unreadable":
+        raise TelemetryUnavailable("Live telemetry 暫時無法讀取")
     if not status.compatible:
         version = "unknown" if status.detected_version is None else status.detected_version
         raise IncompatibleSchema(f"不支援的 telemetry schema version {version}；預期為 1")
@@ -91,6 +93,6 @@ def load_snapshot(path: Path) -> TelemetrySnapshot:
             failovers = pd.read_sql_query(
                 "SELECT * FROM failover_events ORDER BY id DESC", conn
             ).reindex(columns=FAILOVER_COLUMNS)
-    except sqlite3.Error as exc:
+    except (sqlite3.Error, pd.errors.DatabaseError) as exc:
         raise TelemetryUnavailable("Live telemetry 暫時無法讀取") from exc
     return TelemetrySnapshot(requests, failovers, SCHEMA_VERSION, path)

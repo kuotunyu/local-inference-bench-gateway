@@ -3,6 +3,7 @@ from pathlib import Path
 from dashboard.data.demo_fixture import ensure_demo_database
 from dashboard.data.live_status import GatewayStatus
 from dashboard.data.sqlite_repository import load_snapshot
+from dashboard.views.overview import _time_note as overview_time_note
 from dashboard.views.overview import build_overview_model
 from dashboard.views.reliability import build_reliability_model
 from gateway.registry import load_registry
@@ -14,6 +15,7 @@ def test_overview_model_discloses_demo_source_and_time_range(tmp_path: Path) -> 
     assert model.source_label == "DEMO DATA"
     assert model.observed_from is not None
     assert model.observed_to is not None
+    assert overview_time_note(model).endswith("UTC+8")
 
 
 def test_health_is_current_observation_not_uptime(tmp_path: Path) -> None:

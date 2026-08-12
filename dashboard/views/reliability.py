@@ -7,7 +7,12 @@ from dataclasses import dataclass
 import pandas as pd
 import streamlit as st
 
-from dashboard.components import render_page_heading, render_source_badge, render_state_message
+from dashboard.components import (
+    escape_html,
+    render_page_heading,
+    render_source_badge,
+    render_state_message,
+)
 from dashboard.data.live_status import GatewayStatus
 from dashboard.metrics import with_error_categories
 from dashboard.models import TelemetrySnapshot
@@ -71,12 +76,15 @@ def render_reliability(
     with route_col:
         st.markdown("### Alias Routing")
         for route in model.routes:
-            chain = "　→　".join(route["chain"])
+            chain = escape_html("　→　".join(route["chain"]))
             cap = route["max_concurrent"]
-            capacity = "unlimited" if cap is None else f"max_concurrent = {cap}"
+            capacity = escape_html("unlimited" if cap is None else f"max_concurrent = {cap}")
+            models = escape_html(" → ".join(route["models"]))
             st.markdown(
-                f'<div class="status-card" style="margin-bottom:.7rem"><strong>{route["alias"]}</strong>'
+                '<div class="status-card" style="margin-bottom:.7rem">'
+                f"<strong>{escape_html(route['alias'])}</strong>"
                 f'<div style="margin:.5rem 0;color:#40564B">{chain}</div>'
+                f"<small>Resolved model：{models}</small><br>"
                 f"<small>{capacity} · HTTP 429，不建立隱性 queue</small></div>",
                 unsafe_allow_html=True,
             )

@@ -18,7 +18,9 @@ from dashboard.models import TelemetrySnapshot
 
 def build_request_table(requests: pd.DataFrame) -> pd.DataFrame:
     table = with_error_categories(requests)
-    table["timestamp"] = pd.to_datetime(table["timestamp"], utc=True, errors="coerce")
+    table["timestamp"] = pd.to_datetime(
+        table["timestamp"], utc=True, errors="coerce"
+    ).dt.tz_convert("Asia/Taipei")
     table = table.sort_values("timestamp", ascending=False, na_position="last")
     ttft = pd.to_numeric(
         table.get("ttft_ms", pd.Series(index=table.index, dtype=float)), errors="coerce"
@@ -30,6 +32,32 @@ def build_request_table(requests: pd.DataFrame) -> pd.DataFrame:
     )
     table["Latency"] = latency.map(lambda value: "—" if pd.isna(value) else f"{value:,.0f} ms")
     return table
+
+
+def apply_request_filters(
+    requests: pd.DataFrame,
+    *,
+    aliases: list[str] | None = None,
+    backends: list[str] | None = None,
+    outcome: str = "全部",
+    categories: list[str] | None = None,
+    status_codes: list[int] | None = None,
+    stream_mode: str = "全部",
+) -> pd.DataFrame:
+    frame = with_error_categories(requests)
+    if aliases:
+        frame = frame[frame["alias"].isin(aliases)]
+    if backends:
+        frame = frame[frame["backend_name"].isin(backends)]
+    if outcome != "全部":
+        frame = frame[frame["success"].eq(1 if outcome == "Success" else 0)]
+    if categories:
+        frame = frame[frame["error_category"].isin(categories)]
+    if status_codes:
+        frame = frame[pd.to_numeric(frame["status_code"], errors="coerce").isin(status_codes)]
+    if stream_mode != "全部":
+        frame = frame[frame["stream"].eq(1 if stream_mode == "Streaming" else 0)]
+    return frame
 
 
 def _filter_controls(requests: pd.DataFrame) -> pd.DataFrame:
@@ -46,15 +74,24 @@ def _filter_controls(requests: pd.DataFrame) -> pd.DataFrame:
         outcome = st.selectbox("Outcome", ["全部", "Success", "Failure"])
     with filters[3]:
         category = st.multiselect("Error category", categories, placeholder="全部 Error")
-    if alias:
-        frame = frame[frame["alias"].isin(alias)]
-    if backend:
-        frame = frame[frame["backend_name"].isin(backend)]
-    if outcome != "全部":
-        frame = frame[frame["success"].eq(1 if outcome == "Success" else 0)]
-    if category:
-        frame = frame[frame["error_category"].isin(category)]
-    return frame
+    secondary = st.columns(2)
+    status_options = sorted(
+        int(value)
+        for value in pd.to_numeric(frame["status_code"], errors="coerce").dropna().unique()
+    )
+    with secondary[0]:
+        status_codes = st.multiselect("Status code", status_options, placeholder="全部 Status")
+    with secondary[1]:
+        stream_mode = st.selectbox("Transport", ["全部", "Streaming", "Non-streaming"])
+    return apply_request_filters(
+        requests,
+        aliases=alias,
+        backends=backend,
+        outcome=outcome,
+        categories=category,
+        status_codes=status_codes,
+        stream_mode=stream_mode,
+    )
 
 
 def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
@@ -80,7 +117,28 @@ def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
         ("FILTERED REQUESTS", f"{summary.request_count:,}", "matching records"),
         ("SUCCESS RATE", format_metric(summary.success_rate_pct, "%"), "filtered scope"),
         ("P50 LATENCY", format_metric(summary.p50_latency_ms, " ms", digits=0), "total latency"),
+        ("P95 LATENCY", format_metric(summary.p95_latency_ms, " ms", digits=0), "total latency"),
+    ]
+    for column, card in zip(columns, cards, strict=True):
+        with column:
+            render_metric_card(*card)
+    columns = st.columns(3)
+    cards = [
+        ("P50 TTFT", format_metric(summary.p50_ttft_ms, " ms", digits=0), "when present"),
         ("P95 TTFT", format_metric(summary.p95_ttft_ms, " ms", digits=0), "streaming when present"),
+        (
+            "TOKEN VOLUME",
+            (
+                "—"
+                if summary.prompt_tokens is None or summary.completion_tokens is None
+                else f"{summary.prompt_tokens + summary.completion_tokens:,}"
+            ),
+            (
+                "upstream usage incomplete"
+                if summary.prompt_tokens is None or summary.completion_tokens is None
+                else f"{summary.prompt_tokens:,} prompt · {summary.completion_tokens:,} completion"
+            ),
+        ),
     ]
     for column, card in zip(columns, cards, strict=True):
         with column:
