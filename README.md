@@ -28,6 +28,33 @@ or GPU access:
 uv run --frozen python -m release_checks.evidence
 ```
 
+## Operations Console
+
+The Streamlit Operations Console turns the gateway's SQLite telemetry and the committed benchmark
+artifacts into one evidence-first interface. It is designed for both a first-time reviewer and a
+local operator:
+
+- **Demo Mode** opens automatically when no compatible live database exists. Its deterministic
+  fixture is always labeled `DEMO DATA`; it is illustrative traffic, not an unpublished benchmark
+  run or production sample.
+- **Live Mode** reads `GATEWAY_DB_PATH` in read-only mode and shows request volume, success rate,
+  P50/P95 latency, Alias Routing, current Backend Health, Failover Events, observed Backpressure,
+  and a filterable Request Explorer.
+- **Benchmark Evidence** reads the committed aggregate CSV/JSON files, verifies their published
+  SHA-256 digests, and keeps measurement date, hardware, versions, method, and publication boundary
+  next to the charts.
+
+No GPU, model, inference backend, gateway process, or runtime database is required to review Demo
+Mode and Benchmark Evidence:
+
+```bash
+uv sync --frozen --extra dashboard
+uv run streamlit run dashboard/app.py --server.address 127.0.0.1
+```
+
+The console deliberately does not invent queue depth, live GPU utilization, historical uptime, or
+SLA metrics that the current telemetry schema cannot prove.
+
 ## Recorded result snapshot
 
 At concurrency 16, using one RTX 4090 and the pinned environment described in
@@ -90,7 +117,7 @@ than queued indefinitely. Streaming keeps the limiter slot until the upstream st
 | `bench/` | Shared benchmark client, runner, analysis, aggregate evidence, and charts |
 | `release_checks/` | Network-free evidence and publication policy checks |
 | `tests/` | CPU-only behavioral, evidence, publication, documentation, and Docker-policy tests |
-| `dashboard/` | Read-only Streamlit view over the local SQLite database |
+| `dashboard/` | Demo/Live Operations Console plus committed Benchmark Evidence |
 | `docker/smoke/` | CPU-only mock backends and end-to-end smoke client |
 | `docs/SOURCE_AUDIT.md` | Source-to-public boundary and clean-lineage audit |
 | `docs/RELEASE_DESIGN.md` | Public release architecture and boundary decisions |

@@ -45,12 +45,34 @@ Invoke-RestMethod http://127.0.0.1:9000/v1/models -Headers $headers
 
 ## Dashboard
 
-The dashboard reads the same SQLite file and should remain loopback-only:
+The Operations Console should remain loopback-only. It starts in Demo Mode when a compatible live
+database is unavailable, so the full reviewer experience works without a gateway, model, GPU, or
+runtime data:
 
 ```bash
 uv sync --frozen --extra dashboard
 uv run streamlit run dashboard/app.py --server.address 127.0.0.1
 ```
+
+The source selector distinguishes three evidence classes:
+
+- `DEMO DATA`: deterministic illustrative request/failover rows generated under
+  `.dashboard-cache/`; this file is ignored by Git and never replaces `GATEWAY_DB_PATH`.
+- `LIVE`: read-only SQLite telemetry from `GATEWAY_DB_PATH`. A missing, locked, empty, or
+  incompatible database is nonfatal; the console explains the state and safely falls back when
+  necessary.
+- `EVIDENCE`: committed aggregate artifacts under `bench/results`, with provenance digest checks.
+
+Optional live-status settings:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `GATEWAY_BASE_URL` | Public health and authenticated Backend Health endpoint base | `http://127.0.0.1:9000` |
+| `GATEWAY_API_KEY` | Enables `/health/backends` detail when configured | none |
+
+Backend Health is explicitly a current observation, not historical uptime. HTTP 429 and sanitized
+error records support observed Backpressure reporting; the console does not infer queue depth or
+current in-flight utilization.
 
 ## Docker
 

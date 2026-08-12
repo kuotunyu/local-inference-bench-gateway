@@ -133,12 +133,22 @@ git commit -m "feat: add read-only dashboard telemetry repository"
 
 ```python
 def test_compute_overview_uses_window_and_preserves_missing_ttft():
-    rows = request_frame([
-        {"timestamp": "2026-08-13T00:00:00+00:00", "success": 1,
-         "total_latency_ms": 100.0, "ttft_ms": None},
-        {"timestamp": "2026-08-13T00:01:00+00:00", "success": 0,
-         "total_latency_ms": 900.0, "ttft_ms": None},
-    ])
+    rows = request_frame(
+        [
+            {
+                "timestamp": "2026-08-13T00:00:00+00:00",
+                "success": 1,
+                "total_latency_ms": 100.0,
+                "ttft_ms": None,
+            },
+            {
+                "timestamp": "2026-08-13T00:01:00+00:00",
+                "success": 0,
+                "total_latency_ms": 900.0,
+                "ttft_ms": None,
+            },
+        ]
+    )
     result = compute_overview(rows, failover_frame([]))
     assert result.request_count == 2
     assert result.success_rate_pct == 50.0
@@ -146,12 +156,15 @@ def test_compute_overview_uses_window_and_preserves_missing_ttft():
     assert result.p50_ttft_ms is None
 
 
-@pytest.mark.parametrize(("raw", "expected"), [
-    ("connection_error", "Connection"),
-    ("stream_read_error", "Streaming"),
-    ("HTTP 429", "Backpressure"),
-    ("HTTP 503", "Upstream 5xx"),
-])
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("connection_error", "Connection"),
+        ("stream_read_error", "Streaming"),
+        ("HTTP 429", "Backpressure"),
+        ("HTTP 503", "Upstream 5xx"),
+    ],
+)
 def test_categorize_error(raw, expected):
     assert categorize_error(raw, status_code=None) == expected
 ```
@@ -492,10 +505,17 @@ git commit -m "feat: add request explorer and benchmark evidence views"
 Cover:
 
 ```python
-@pytest.mark.parametrize("condition", [
-    "missing_live_db", "empty_live_db", "incompatible_schema",
-    "sqlite_locked", "gateway_offline", "evidence_digest_mismatch",
-])
+@pytest.mark.parametrize(
+    "condition",
+    [
+        "missing_live_db",
+        "empty_live_db",
+        "incompatible_schema",
+        "sqlite_locked",
+        "gateway_offline",
+        "evidence_digest_mismatch",
+    ],
+)
 def test_dashboard_state_is_nonfatal(condition, scenario_factory):
     state = build_app_state(**scenario_factory(condition))
     assert state.fatal_error is None
