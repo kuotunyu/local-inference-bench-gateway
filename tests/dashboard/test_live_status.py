@@ -10,9 +10,7 @@ def test_gateway_status_reads_public_and_backend_health() -> None:
         return_value=httpx.Response(200, json={"status": "ok"})
     )
     respx.get("http://127.0.0.1:9000/health/backends").mock(
-        return_value=httpx.Response(
-            200, json={"http://127.0.0.1:8080/v1": {"healthy": True}}
-        )
+        return_value=httpx.Response(200, json={"http://127.0.0.1:8080/v1": {"healthy": True}})
     )
     status = fetch_gateway_status("http://127.0.0.1:9000", "secret")
     assert status.reachable is True

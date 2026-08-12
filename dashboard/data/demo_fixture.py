@@ -25,8 +25,8 @@ def ensure_demo_database(directory: Path) -> Path:
     request_rows = []
     for index in range(60):
         alias = "fast" if index % 3 else "smart"
-        backend = "ollama-smart" if alias == "smart" else (
-            "ollama" if index in {17, 41} else "llamacpp"
+        backend = (
+            "ollama-smart" if alias == "smart" else ("ollama" if index in {17, 41} else "llamacpp")
         )
         status, success, error = 200, 1, None
         if index == 11:
@@ -66,9 +66,27 @@ def ensure_demo_database(directory: Path) -> Path:
             """INSERT INTO failover_events
             (timestamp, alias, failed_backend, next_backend, reason) VALUES (?, ?, ?, ?, ?)""",
             [
-                ((start + timedelta(minutes=17)).isoformat(), "fast", "llamacpp", "ollama", "HTTP 503"),
-                ((start + timedelta(minutes=41)).isoformat(), "fast", "llamacpp", "ollama", "timeout"),
-                ((start + timedelta(minutes=49)).isoformat(), "smart", "ollama-smart", None, "connection_error"),
+                (
+                    (start + timedelta(minutes=17)).isoformat(),
+                    "fast",
+                    "llamacpp",
+                    "ollama",
+                    "HTTP 503",
+                ),
+                (
+                    (start + timedelta(minutes=41)).isoformat(),
+                    "fast",
+                    "llamacpp",
+                    "ollama",
+                    "timeout",
+                ),
+                (
+                    (start + timedelta(minutes=49)).isoformat(),
+                    "smart",
+                    "ollama-smart",
+                    None,
+                    "connection_error",
+                ),
             ],
         )
         conn.commit()

@@ -41,9 +41,9 @@ def compute_overview(requests: pd.DataFrame, failovers: pd.DataFrame) -> Overvie
 
 
 def categorize_error(raw: str | None, status_code: int | None) -> str | None:
-    if raw is None and status_code is None:
+    if (raw is None or pd.isna(raw)) and status_code is None:
         return None
-    value = (raw or "").lower()
+    value = "" if raw is None or pd.isna(raw) else str(raw).lower()
     if status_code == 429 or "429" in value or "concurrency_limit" in value:
         return "Backpressure"
     if "connection" in value:

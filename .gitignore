@@ -39,6 +39,7 @@ dist/
 *.egg-info/
 .worktrees/
 .superpowers/
+.dashboard-cache/
 
 # Editors and operating systems
 .idea/

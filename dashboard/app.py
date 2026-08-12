@@ -1,81 +1,133 @@
-"""Streamlit dashboard over the gateway's SQLite request log.
+"""Evidence-first Streamlit Operations Console.
 
-Run: streamlit run dashboard/app.py
+Run: uv run streamlit run dashboard/app.py --server.address 127.0.0.1
 """
 
 from __future__ import annotations
 
 import os
-import sqlite3
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
 
-DB_PATH = Path(os.environ.get("GATEWAY_DB_PATH", "data/gateway.db"))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-st.set_page_config(page_title="Gateway Dashboard", layout="wide")
-st.title("本地推論閘道 — 請求儀表板")
+from dashboard.components import render_state_message  # noqa: E402
+from dashboard.data.benchmark_repository import load_benchmark_evidence  # noqa: E402
+from dashboard.data.demo_fixture import select_default_mode  # noqa: E402
+from dashboard.data.live_status import GatewayStatus, fetch_gateway_status  # noqa: E402
+from dashboard.state import load_telemetry_state, slice_observation_window  # noqa: E402
+from dashboard.theme import apply_theme  # noqa: E402
+from dashboard.views.evidence import render_evidence  # noqa: E402
+from dashboard.views.overview import render_overview  # noqa: E402
+from dashboard.views.reliability import render_reliability  # noqa: E402
+from dashboard.views.requests import render_requests  # noqa: E402
+from gateway.registry import RegistryConfigError, load_registry  # noqa: E402
 
-if st.button("重新整理"):
-    st.rerun()
+PAGES = ["Overview", "Routing & Reliability", "Requests", "Benchmark Evidence"]
+WINDOWS = {"15 分鐘": 15, "60 分鐘": 60, "6 小時": 360, "24 小時": 1440, "全部資料": None}
 
-if not DB_PATH.exists():
-    st.warning(f"找不到資料庫：{DB_PATH}。請先啟動閘道並送出至少一個請求。")
-    st.stop()
 
-conn = sqlite3.connect(str(DB_PATH))
-requests_df = pd.read_sql_query("SELECT * FROM requests ORDER BY id DESC", conn)
-failover_df = pd.read_sql_query("SELECT * FROM failover_events ORDER BY id DESC", conn)
-conn.close()
+def _project_path(raw: str) -> Path:
+    path = Path(raw)
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
-if requests_df.empty:
-    st.info("尚無請求紀錄。")
-    st.stop()
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("總請求數", len(requests_df))
-success_rate = requests_df["success"].mean() * 100
-col2.metric("成功率", f"{success_rate:.1f}%")
-col3.metric("平均總延遲", f"{requests_df['total_latency_ms'].mean():.0f} ms")
-col4.metric("Failover 事件數", len(failover_df))
-
-st.subheader("各別名統計")
-by_alias = (
-    requests_df.groupby("alias")
-    .agg(
-        requests=("id", "count"),
-        success_rate_pct=("success", lambda s: round(s.mean() * 100, 1)),
-        median_latency_ms=("total_latency_ms", "median"),
-        p95_latency_ms=("total_latency_ms", lambda s: s.quantile(0.95)),
-        total_completion_tokens=("completion_tokens", "sum"),
+def _demo_status() -> GatewayStatus:
+    checked = datetime(2026, 8, 12, 17, 45, tzinfo=timezone.utc)
+    return GatewayStatus(
+        True,
+        checked,
+        {
+            "http://127.0.0.1:8080/v1": {
+                "healthy": True,
+                "last_checked": checked.isoformat(),
+            },
+            "http://127.0.0.1:11434/v1": {
+                "healthy": True,
+                "last_checked": checked.isoformat(),
+            },
+        },
+        "demo_fixture",
     )
-    .reset_index()
-)
-st.dataframe(by_alias, use_container_width=True)
 
-st.subheader("延遲分布（依別名）")
-st.bar_chart(requests_df, x="alias", y="total_latency_ms", stack=False)
 
-st.subheader("最近請求")
-display_cols = [
-    "timestamp",
-    "alias",
-    "backend_name",
-    "model",
-    "stream",
-    "status_code",
-    "success",
-    "prompt_tokens",
-    "completion_tokens",
-    "ttft_ms",
-    "total_latency_ms",
-    "error_message",
-]
-st.dataframe(requests_df[display_cols].head(200), use_container_width=True)
+def _header_controls(live_path: Path) -> tuple[str, str, int | None]:
+    brand, controls = st.columns([1.1, 2.9], vertical_alignment="bottom")
+    with brand:
+        st.markdown(
+            '<div class="ops-kicker" style="margin-bottom:.45rem">LOCAL INFERENCE / OPS</div>'
+            '<div style="font-weight:820;font-size:1.08rem">Operations Console</div>',
+            unsafe_allow_html=True,
+        )
+    with controls:
+        source_col, window_col = st.columns([1, 1])
+        default = select_default_mode(live_path)
+        with source_col:
+            mode_label = st.selectbox(
+                "Telemetry source",
+                ["Demo Mode", "Live Mode"],
+                index=1 if default == "live" else 0,
+                key="telemetry_source",
+            )
+        with window_col:
+            window_label = st.selectbox(
+                "Observation window", list(WINDOWS), index=1, key="observation_window"
+            )
+    st.markdown('<div class="ops-rule" style="margin:.8rem 0"></div>', unsafe_allow_html=True)
+    page = st.radio("View", PAGES, horizontal=True, label_visibility="collapsed")
+    return ("live" if mode_label == "Live Mode" else "demo"), page, WINDOWS[window_label]
 
-st.subheader("Failover 事件")
-if failover_df.empty:
-    st.caption("尚無 failover 事件（所有請求都由主要後端成功處理）。")
-else:
-    st.dataframe(failover_df, use_container_width=True)
+
+def main() -> None:
+    st.set_page_config(
+        page_title="Local Inference · Operations Console",
+        page_icon="◉",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
+    apply_theme()
+    live_path = _project_path(os.environ.get("GATEWAY_DB_PATH", "data/gateway.db"))
+    mode, page, minutes = _header_controls(live_path)
+    telemetry = load_telemetry_state(mode, live_path, PROJECT_ROOT / ".dashboard-cache")
+    snapshot = slice_observation_window(telemetry.snapshot, minutes, telemetry.source_kind)
+    if telemetry.notice:
+        render_state_message("已切換至安全資料源", telemetry.notice, "warning")
+
+    try:
+        registry = load_registry(
+            _project_path(os.environ.get("GATEWAY_MODELS_PATH", "gateway/models.yaml"))
+        )
+    except (OSError, RegistryConfigError) as exc:
+        render_state_message("Registry unavailable", str(exc), "failure")
+        return
+
+    if telemetry.source_kind == "demo":
+        status = _demo_status()
+    else:
+        status = fetch_gateway_status(
+            os.environ.get("GATEWAY_BASE_URL", "http://127.0.0.1:9000"),
+            os.environ.get("GATEWAY_API_KEY") or None,
+        )
+
+    if page == "Overview":
+        render_overview(snapshot, telemetry.source_kind, status, registry)
+    elif page == "Routing & Reliability":
+        render_reliability(snapshot, telemetry.source_kind, status, registry)
+    elif page == "Requests":
+        render_requests(snapshot, telemetry.source_kind)
+    else:
+        render_evidence(load_benchmark_evidence(PROJECT_ROOT / "bench/results"))
+
+    st.markdown('<div class="ops-rule" style="margin-top:2.4rem"></div>', unsafe_allow_html=True)
+    st.caption(
+        "Single-workstation reference system · SQLite telemetry · aggregate benchmark evidence · loopback only"
+    )
+
+
+if __name__ == "__main__":
+    main()
