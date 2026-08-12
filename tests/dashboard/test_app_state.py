@@ -9,7 +9,7 @@ def test_missing_live_database_falls_back_without_creating_it(tmp_path: Path) ->
     state = load_telemetry_state("live", live, tmp_path / "demo")
     assert state.source_kind == "demo"
     assert state.notice is not None
-    assert "uv run gateway" in state.notice
+    assert "uv run uvicorn gateway.app:app --host 127.0.0.1 --port 9000" in state.notice
     assert "GATEWAY_DB_PATH" in state.notice
     assert not live.exists()
 
