@@ -144,6 +144,45 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
             "milliseconds · JSON rewrite、failover bookkeeping 與 SSE pass-through 的量測成本"
         )
 
+    vram_col, kv_col = st.columns([1, 1.35], gap="large")
+    with vram_col:
+        st.markdown("### VRAM baseline · concurrency 16")
+        if not c16.empty:
+            vram = c16.copy()
+            vram["engine"] = vram["engine"].map(_engine_label)
+            vram = vram.set_index("engine")[["median_vram_baseline_mb"]]
+            st.bar_chart(vram, color="#718B7A", height=300)
+            st.caption(
+                "MiB · measured baseline，並非模型品質或跨硬體效率排名；不同 frontend 的 memory strategy 不同。"
+            )
+    with kv_col:
+        st.markdown("### LM Studio · Unified KV Cache control")
+        if evidence.kv_cache_off and evidence.kv_cache_on:
+            off = pd.DataFrame(evidence.kv_cache_off).rename(
+                columns={"ttft_p50_s": "Unified KV Cache OFF"}
+            )
+            on = pd.DataFrame(evidence.kv_cache_on).rename(
+                columns={"ttft_p50_s": "Unified KV Cache ON"}
+            )
+            control = off[["concurrency", "Unified KV Cache OFF"]].merge(
+                on[["concurrency", "Unified KV Cache ON"]], on="concurrency"
+            )
+            control[["Unified KV Cache OFF", "Unified KV Cache ON"]] *= 1000
+            st.line_chart(
+                control.set_index("concurrency"),
+                color=["#718B7A", "#B1815F"],
+                height=300,
+            )
+            st.caption(
+                "P50 TTFT / ms · paired controlled observation。ON 在部分 concurrency 出現高延遲；內部分配或 scheduling 解釋仍是 hypothesis。"
+            )
+        else:
+            render_state_message(
+                "Controlled scan unavailable",
+                "Unified KV Cache paired artifacts 無法讀取。",
+                "warning",
+            )
+
     st.markdown("### Method & Provenance")
     render_state_message("Scope", model.scope_note)
     measurement = evidence.provenance.get("measurement", {})

@@ -16,6 +16,8 @@ def test_repository_loads_committed_aggregate_evidence() -> None:
     assert set(evidence.concurrency["engine"]) == {"llamacpp", "ollama", "lmstudio"}
     assert evidence.overhead["overhead_ms"] == pytest.approx(1.656700020248536)
     assert evidence.provenance["measurement"]["public_raw_request_runs"] is False
+    assert len(evidence.kv_cache_off) == 16
+    assert len(evidence.kv_cache_on) == 16
     assert evidence.warnings == {}
 
 
