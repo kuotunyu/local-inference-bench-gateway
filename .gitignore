@@ -18,7 +18,7 @@ engines/
 # Raw measurements and runtime state
 bench/results/raw/
 *.jsonl
-data/
+/data/
 *.db
 *.db-*
 *.sqlite
