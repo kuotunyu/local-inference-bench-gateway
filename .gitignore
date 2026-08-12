@@ -37,6 +37,8 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+.worktrees/
+.superpowers/
 
 # Editors and operating systems
 .idea/
