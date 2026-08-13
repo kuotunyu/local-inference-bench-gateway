@@ -1,11 +1,16 @@
 from pathlib import Path
 
+import pandas as pd
+
 from dashboard.data.benchmark_repository import load_benchmark_evidence
 from dashboard.views.evidence import (
     build_evidence_view_model,
+    build_gateway_cost_chart,
+    build_kv_chart,
     build_prefill_chart,
     build_throughput_chart,
     build_ttft_chart,
+    build_vram_chart,
     render_evidence,
 )
 
@@ -20,17 +25,42 @@ def test_benchmark_model_includes_scope_and_environment() -> None:
 
 def test_primary_evidence_charts_use_expanded_readable_canvases() -> None:
     evidence = load_benchmark_evidence(Path("bench/results"))
+    c16 = evidence.concurrency[evidence.concurrency["concurrency"].eq(16)]
+    kv_control = pd.DataFrame(
+        {
+            "concurrency": [1, 4],
+            "Unified KV Cache OFF": [110.0, 160.0],
+            "Unified KV Cache ON": [105.0, 180.0],
+        }
+    )
 
     throughput = build_throughput_chart(evidence.concurrency).to_dict()
     ttft = build_ttft_chart(evidence.concurrency).to_dict()
     prefill = build_prefill_chart(evidence.prefill).to_dict()
+    gateway = build_gateway_cost_chart(evidence.overhead).to_dict()
+    vram = build_vram_chart(c16).to_dict()
+    kv = build_kv_chart(kv_control).to_dict()
 
     assert throughput["height"] == 400
     assert throughput["encoding"]["x"]["title"] == "Concurrency"
     assert ttft["height"] == 400
     assert prefill["height"] >= 340
+    assert gateway["height"] >= 340
+    assert vram["height"] >= 340
+    assert kv["height"] >= 340
     assert throughput["config"]["axis"]["labelFontSize"] >= 14
     assert ttft["encoding"]["color"]["legend"]["orient"] == "bottom"
+    for chart in (throughput, ttft, prefill, gateway, vram, kv):
+        assert chart["encoding"]["y"]["title"] is None
+    assert throughput["encoding"]["y"]["field"] == "median_aggregate_tok_s"
+    assert ttft["encoding"]["y"]["field"] == "ttft_ms"
+    assert prefill["encoding"]["y"]["field"] == "median_ttft_s"
+    assert gateway["encoding"]["y"]["field"] == "milliseconds"
+    assert vram["encoding"]["y"]["field"] == "median_vram_baseline_mb"
+    assert kv["encoding"]["y"]["field"] == "ttft_ms"
+    assert throughput["encoding"]["y"]["scale"]["zero"] is True
+    assert ttft["encoding"]["y"]["scale"]["zero"] is True
+    assert kv["encoding"]["y"]["scale"]["zero"] is True
 
 
 def test_missing_evidence_artifacts_degrade_without_exception(tmp_path: Path) -> None:

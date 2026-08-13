@@ -10,6 +10,7 @@ import streamlit as st
 
 from dashboard.charts import bar_chart, line_chart
 from dashboard.components import (
+    chart_measure_key_html,
     format_metric,
     render_metric_grid,
     render_page_heading,
@@ -66,7 +67,7 @@ def build_throughput_chart(concurrency: pd.DataFrame) -> alt.Chart:
         color="engine:N",
         height=400,
         x_title="Concurrency",
-        y_title="Throughput / tok/s",
+        y_title=None,
         tooltip=["engine:N", "concurrency:Q", "median_aggregate_tok_s:Q"],
         color_range=["#718B7A", "#78909A", "#B1815F"],
         zero=True,
@@ -92,7 +93,7 @@ def build_ttft_chart(concurrency: pd.DataFrame) -> alt.Chart:
         color="series:N",
         height=400,
         x_title="Concurrency",
-        y_title="TTFT / ms",
+        y_title=None,
         tooltip=["engine:N", "percentile:N", "concurrency:Q", "ttft_ms:Q"],
         color_range=["#718B7A", "#9FB2A5", "#78909A", "#A6BBC2", "#B1815F", "#D1AA8E"],
         zero=True,
@@ -110,7 +111,7 @@ def build_prefill_chart(prefill: pd.DataFrame) -> alt.Chart:
         color="engine:N",
         height=350,
         x_title="Engine · 目標 tokens",
-        y_title="Median TTFT / s",
+        y_title=None,
         tooltip=["engine:N", "prompt_target_tokens:Q", "median_ttft_s:Q"],
         color_range=["#718B7A", "#78909A", "#B1815F"],
     )
@@ -134,7 +135,7 @@ def build_gateway_cost_chart(overhead: dict) -> alt.Chart:
         color="metric:N",
         height=350,
         x_title=None,
-        y_title="Latency / ms",
+        y_title=None,
         tooltip=["path:N", "metric:N", "milliseconds:Q"],
         color_range=["#718B7A", "#B1815F", "#78909A"],
     )
@@ -150,7 +151,7 @@ def build_vram_chart(c16: pd.DataFrame) -> alt.Chart:
         color="engine:N",
         height=350,
         x_title=None,
-        y_title="VRAM baseline / MiB",
+        y_title=None,
         tooltip=["engine:N", "median_vram_baseline_mb:Q"],
         color_range=["#718B7A", "#78909A", "#B1815F"],
     )
@@ -165,10 +166,17 @@ def build_kv_chart(control: pd.DataFrame) -> alt.Chart:
         color="setting:N",
         height=350,
         x_title="Concurrency",
-        y_title="P50 TTFT / ms",
+        y_title=None,
         tooltip=["setting:N", "concurrency:Q", "ttft_ms:Q"],
         color_range=["#718B7A", "#B1815F"],
         zero=True,
+    )
+
+
+def _render_measure_key(mark: str, label: str) -> None:
+    st.markdown(
+        chart_measure_key_html([(mark, "neutral", label)]),
+        unsafe_allow_html=True,
     )
 
 
@@ -237,11 +245,13 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
     if not concurrency_ok:
         render_state_message("Artifact 無法使用", "concurrency_summary.csv 無法讀取。", "warning")
     else:
+        _render_measure_key("line", "Throughput／tok/s")
         st.altair_chart(build_throughput_chart(evidence.concurrency), width="stretch")
         st.caption("tokens/sec · 五次測量的 median · 數值越高越好")
 
     st.markdown("### 依 concurrency 比較 P50 / P95 TTFT")
     if concurrency_ok:
+        _render_measure_key("line", "TTFT／ms")
         st.altair_chart(build_ttft_chart(evidence.concurrency), width="stretch")
         st.caption("milliseconds · series label 標示 percentile · 數值越低越好")
 
@@ -252,6 +262,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
             evidence.prefill, {"engine", "prompt_target_tokens", "median_ttft_s"}
         )
         if prefill_ok:
+            _render_measure_key("bar", "Median TTFT／s")
             st.altair_chart(build_prefill_chart(evidence.prefill), width="stretch")
             st.caption("Median TTFT（秒）· 校準為實際 1,970 與 7,880 tokens 的輸入")
         else:
@@ -262,6 +273,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
         direct = overhead.get("direct", {})
         via = overhead.get("via_gateway", {})
         if isinstance(direct, dict) and isinstance(via, dict) and direct and via:
+            _render_measure_key("bar", "Latency／ms")
             st.altair_chart(build_gateway_cost_chart(overhead), width="stretch")
             st.caption(
                 "milliseconds · JSON rewrite、Failover bookkeeping 與 SSE pass-through 的量測成本"
@@ -273,6 +285,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
     with vram_col:
         st.markdown("### VRAM baseline · concurrency 16")
         if not c16.empty:
+            _render_measure_key("bar", "VRAM baseline／MiB")
             st.altair_chart(build_vram_chart(c16), width="stretch")
             st.caption(
                 "MiB · measured baseline，並非模型品質或跨硬體效率排名；不同 frontend 採用不同 memory strategy。"
@@ -293,6 +306,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
                     on[["concurrency", "Unified KV Cache ON"]], on="concurrency"
                 )
                 control[["Unified KV Cache OFF", "Unified KV Cache ON"]] *= 1000
+                _render_measure_key("line", "P50 TTFT／ms")
                 st.altair_chart(build_kv_chart(control), width="stretch")
                 st.caption(
                     "P50 TTFT / ms · paired controlled observation。ON 在部分 concurrency 出現高延遲；內部分配或 scheduling 的解釋仍屬 hypothesis。"

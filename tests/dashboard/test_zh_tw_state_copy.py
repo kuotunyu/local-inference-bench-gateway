@@ -44,5 +44,17 @@ def test_missing_evidence_uses_zh_tw_warning_heading(tmp_path: Path, monkeypatch
     monkeypatch.setenv("DASHBOARD_TEST_RESULTS_DIR", str(tmp_path))
     app = AppTest.from_file(str(STATE_APP_PATH)).run(timeout=20)
 
+    visible = _visible_markdown(app)
     assert not app.exception
-    assert "證據驗證警告" in _visible_markdown(app)
+    assert "證據驗證警告" in visible
+    assert all(
+        label not in visible
+        for label in (
+            "Throughput／tok/s",
+            "TTFT／ms",
+            "Median TTFT／s",
+            "Latency／ms",
+            "VRAM baseline／MiB",
+            "P50 TTFT／ms",
+        )
+    )

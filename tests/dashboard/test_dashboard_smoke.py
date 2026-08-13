@@ -127,6 +127,12 @@ def test_benchmark_evidence_uses_zh_tw_first_copy(tmp_path: Path, monkeypatch) -
         "PUBLIC RAW RUNS",
         "測量方法與 provenance",
         "● 證據",
+        "Throughput／tok/s",
+        "TTFT／ms",
+        "Median TTFT／s",
+        "Latency／ms",
+        "VRAM baseline／MiB",
+        "P50 TTFT／ms",
     ]
     assert not app.exception
     assert all(fragment in visible for fragment in expected)

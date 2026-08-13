@@ -35,7 +35,7 @@
 - Valid marks: `bar`, `line`. Valid tones: `request`, `latency`, `neutral`.
 - Consumed by: Overview and Benchmark view render paths.
 
-- [ ] **Step 1: Write failing component and Overview compatibility tests**
+- [x] **Step 1: Write failing component and Overview compatibility tests**
 
 Add component tests:
 
@@ -63,7 +63,7 @@ Update the theme test to require the generic `.chart-measure-key`, `.chart-key-i
 surface, and the exact mobile 15 px rule. Keep the existing Overview rendered labels and chart-spec
 assertions unchanged.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run:
 
@@ -73,7 +73,7 @@ uv run pytest tests/dashboard/test_components.py tests/dashboard/test_theme.py t
 
 Expected: collection or assertion failure because the shared helper and generic theme selectors do not exist.
 
-- [ ] **Step 3: Implement the shared component and preserve Overview rendering**
+- [x] **Step 3: Implement the shared component and preserve Overview rendering**
 
 In `dashboard/components.py`, validate the finite mark/tone vocabulary, escape labels, add
 `aria-hidden="true"`, and emit one flat key row. In `dashboard/theme.py`, rename the activity-only
@@ -91,11 +91,11 @@ Retain the existing green/orange Overview tones, add a neutral evidence tone usi
 and keep the existing bar/line swatch geometry. Import and render the shared helper in Overview;
 delete its local `activity_measure_key_html()`.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run the command from Step 2. Expected: PASS with Overview visually and semantically unchanged.
 
-- [ ] **Step 5: Commit the shared component**
+- [x] **Step 5: Commit the shared component**
 
 ```powershell
 git add dashboard/components.py dashboard/theme.py dashboard/views/overview.py tests/dashboard/test_components.py tests/dashboard/test_theme.py tests/dashboard/test_view_models.py tests/dashboard/test_dashboard_smoke.py
@@ -117,14 +117,14 @@ git commit -m "refactor: share chart measure keys"
 - Consumes: `chart_measure_key_html(measures: list[ChartMeasure]) -> str`.
 - Preserves: all six existing Benchmark chart-builder function signatures and return types.
 
-- [ ] **Step 1: Write failing chart-spec and rendered-state tests**
+- [x] **Step 1: Write failing chart-spec and rendered-state tests**
 
 For all six builders, assert `spec["encoding"]["y"]["title"] is None` while retaining the existing
 height, field, legend, and zero-scale assertions. Add all six horizontal labels to the normal
 Benchmark smoke expectations. In the missing-evidence AppTest, assert none of those labels appears,
 proving labels follow chart availability rather than headings alone.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run:
 
@@ -134,7 +134,7 @@ uv run pytest tests/dashboard/test_evidence_view.py tests/dashboard/test_dashboa
 
 Expected: chart specs still expose six Y-axis titles and normal rendering lacks the six horizontal labels.
 
-- [ ] **Step 3: Remove Y-axis titles and render keys only beside available charts**
+- [x] **Step 3: Remove Y-axis titles and render keys only beside available charts**
 
 Pass `y_title=None` in every Benchmark chart builder. Immediately before each `st.altair_chart`,
 render the matching one-item neutral key:
@@ -149,11 +149,11 @@ st.markdown(
 Use `bar` for Prefill, Gateway cost, and VRAM; use `line` for Throughput, TTFT, and KV control.
 Keep each key inside the same availability branch as its chart.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run the command from Step 2. Expected: PASS with six title-free quantitative axes, six labels in the valid fixture, and no orphaned labels in the missing fixture.
 
-- [ ] **Step 5: Run complete automated verification**
+- [x] **Step 5: Run complete automated verification**
 
 ```powershell
 uv run pytest tests/dashboard -q
@@ -166,14 +166,14 @@ git diff --check
 
 Expected: every command exits 0.
 
-- [ ] **Step 6: Inspect Benchmark Evidence in one bounded browser pass**
+- [x] **Step 6: Inspect Benchmark Evidence in one bounded browser pass**
 
 Restart `http://127.0.0.1:8502/`, open `Benchmark 證據`, and inspect the full page. Verify every
 rendered plot has a horizontal label and no rotated quantitative title, legends remain distinct,
 numeric ticks remain visible, and no overflow, clipping, or Streamlit exception appears. Apply at
 most one correction and confirm once.
 
-- [ ] **Step 7: Run the Impeccable detector and commit**
+- [x] **Step 7: Run the Impeccable detector and commit**
 
 ```powershell
 node "$env:USERPROFILE\.codex\skills\impeccable\scripts\detect.mjs" --json dashboard/components.py dashboard/theme.py dashboard/views/overview.py dashboard/views/evidence.py
@@ -182,3 +182,17 @@ git commit -m "fix: replace benchmark axis titles"
 ```
 
 Leave the verified `8502` preview open on `Benchmark 證據` for continued UI review.
+
+## Execution Notes
+
+- Task 1 RED failed because the shared component and generic CSS selectors did not exist. The same
+  15 focused tests passed after promoting the Overview key into the shared component.
+- Task 2 RED failed because the six Benchmark chart specs still exposed Y-axis titles and the six
+  horizontal labels were absent. The same five focused tests passed after the minimal change.
+- Final automated verification passed with 79 dashboard tests and 167 full repository tests,
+  Ruff lint/format, publication/evidence/document/docker release checks, and `git diff --check`.
+- The 1280 px full-page browser pass rendered six charts and six horizontal labels, with no old
+  quantitative axis-title strings, horizontal overflow, or Streamlit exception. Engine and series
+  legends remained visible below their respective charts.
+- The Impeccable detector returned no findings for the shared component, theme, Overview, or
+  Benchmark Evidence view.
