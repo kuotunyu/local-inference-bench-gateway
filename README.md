@@ -10,44 +10,44 @@
 
 ![Operations Console Demo Mode](docs/assets/operations-console-overview.png)
 
-## 一眼看重點
+## 工程能力與驗證範圍
 
 - 用同一個 Async Benchmark Client 與 workload matrix 比較三種本機 OpenAI-compatible Backend engines，同時保留可驗證的 aggregate evidence。
 - Gateway 讓用戶端只需使用穩定 Alias，由 Model Registry 依序嘗試 Backend；容量滿載時回覆 HTTP 429，不建立無上限的 in-memory queue。
 - Operations Console 清楚區分 Demo、Live 與 Benchmark Evidence，不把示範資料包裝成實際流量，也不把 aggregate artifact 當成 request-level raw data。
 - CPU-only reviewer 不需 GPU、模型權重或推論引擎，即可檢視 UI、重算 canonical claims 並執行 release policy checks。
 
-## 系統邊界（System Context）
+## 系統邊界
 
 這張圖將 request path、benchmark path 與 evidence / observability surface 放在同一個邊界視圖中，讓元件責任與資料流向可以分層閱讀。
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "18px"}, "flowchart": {"nodeSpacing": 32, "rankSpacing": 44}}}%%
 flowchart TB
-    subgraph Entry["Entry points"]
+    subgraph Entry["輸入端"]
         direction LR
-        Client["OpenAI SDK / HTTP Client"]
+        Client["OpenAI SDK／HTTP Client"]
         Bench["Async Benchmark Client"]
         Client ~~~ Bench
     end
 
-    subgraph Execution["Execution boundary"]
+    subgraph Execution["執行邊界"]
         direction LR
-        Gateway["FastAPI Gateway · Alias Routing / Capacity / Failover"]
-        Engines["External Backend engines · llama.cpp / Ollama / LM Studio"]
+        Gateway["FastAPI Gateway · Alias Routing／Capacity／Failover"]
+        Engines["外部 Backend engines · llama.cpp／Ollama／LM Studio"]
     end
 
-    subgraph Observability["Runtime observability"]
+    subgraph Observability["執行期可觀測性"]
         direction LR
         Telemetry[("SQLite Telemetry")]
         Console["Operations Console"]
     end
 
-    subgraph Evidence["Published evidence"]
+    subgraph Evidence["已發布證據"]
         direction LR
-        Aggregates["Aggregate Artifacts"]
-        Verifier["Digest + Claim Verifier"]
-        Surfaces["README / EVAL_REPORT / Operations Console"]
+        Aggregates["Aggregate artifacts"]
+        Verifier["Digest／Claim Verifier"]
+        Surfaces["README／EVAL_REPORT／Operations Console"]
     end
 
     Client --> Gateway
@@ -77,77 +77,76 @@ flowchart TB
 每個 request 都依 Alias 的 ordered Backend chain 在當下重新嘗試；Health poller 只提供觀測結果，不會成為 request-time routing oracle。
 
 ```mermaid
-%%{init: {"themeVariables": {"fontSize": "17px"}, "sequence": {"actorFontSize": 17, "messageFontSize": 17, "noteFontSize": 16, "messageMargin": 20, "noteMargin": 8, "mirrorActors": false}}}%%
+%%{init: {"themeVariables": {"fontSize": "20px"}, "sequence": {"actorFontSize": 20, "messageFontSize": 19, "noteFontSize": 18, "messageMargin": 22, "noteMargin": 8, "mirrorActors": false}}}%%
 sequenceDiagram
     participant Client
     participant Gateway
-    participant Primary
-    participant Fallback
-    participant Telemetry
+    participant Primary as Primary Backend
+    participant Fallback as Fallback Backend
 
-    Client->>Gateway: POST /v1/chat/completions with Alias
-    Gateway->>Gateway: auth + Alias validation + try capacity slot
-    alt capacity exhausted · no queue
+    Client->>Gateway: POST /v1/chat/completions 以 Alias
+    Gateway->>Gateway: auth · Alias validation · acquire slot
+    alt 容量已滿 · 不排隊
         Gateway-->>Client: HTTP 429 + Retry-After
-    else slot acquired
-        Gateway->>Primary: resolve Alias → ordered first attempt
-        alt primary success or 4xx
-            Primary-->>Gateway: success or 4xx: no Failover
-        else retryable upstream failure
-            Primary--xGateway: connection / timeout / protocol / non-final 5xx
-            Gateway->>Telemetry: sanitized Failover event
-            Gateway->>Fallback: attempt next Backend
+    else 成功取得 slot
+        Gateway->>Primary: 解析 Alias · 嘗試 Primary
+        alt 成功或 4xx · 不 Failover
+            Primary-->>Gateway: 成功或 4xx · 不 Failover
+        else 可重試 upstream failure
+            Primary--xGateway: connection／timeout／protocol／non-final 5xx
+            Gateway->>Gateway: 記錄去敏 Failover event
+            Gateway->>Fallback: 嘗試 Fallback Backend
             Fallback-->>Gateway: response
         end
-        Gateway-->>Client: JSON response / Streaming SSE
-        Note over Gateway,Primary: Streaming: slot held until end / failure / cancel
-        Gateway->>Telemetry: metadata-only request telemetry
-        Gateway->>Gateway: release slot in finally
+        Gateway-->>Client: JSON response／streaming SSE
+        Note over Gateway,Primary: Streaming：持有 slot 至結束／失敗／取消
+        Gateway->>Gateway: 記錄 metadata-only request telemetry
+        Gateway->>Gateway: finally 釋放 slot
     end
 ```
 
 Streaming request 從上游連線開始到 stream 結束、失敗或取消之前都佔用 limiter slot。如果連線已開始後才發生讀取錯誤，Gateway 會終止 stream 並記錄受控類別，不會偽造 `[DONE]` 或中途切換 Backend。
 
-## Benchmark 證據鏈（Evidence Pipeline）
+## Benchmark 證據鏈
 
 這條證據鏈用五個 stage 分開 input、measurement、publication boundary、verification 與 presentation；每個 measured request 都先加入 random nonce，避免 repeated prefix cache 改變 prefill 量測性質。
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "18px"}, "flowchart": {"nodeSpacing": 32, "rankSpacing": 42}}}%%
 flowchart TB
-    subgraph Inputs["1 · Inputs"]
+    subgraph Inputs["1 · 輸入"]
         direction LR
-        Workload["Synthetic calibrated prompts / workload matrix"]
+        Workload["合成校準 prompts／workload matrix"]
         Nonce["random 8-character nonce"]
         Workload --> Nonce
     end
 
-    subgraph Measurement["2 · Measurement"]
+    subgraph Measurement["2 · 量測"]
         direction LR
-        Client["Async Benchmark Client · 3 warmups + 5 timed runs"]
-        Resident["one measured engine resident on GPU"]
+        Client["Async Benchmark Client · warmup 3 次 · 計時 5 次"]
+        Resident["每次僅一個受測 engine 常駐 GPU"]
         Client --> Resident
     end
 
-    subgraph Boundary["3 · Publication boundary"]
+    subgraph Boundary["3 · 發布邊界"]
         direction LR
-        Raw["request-level raw runs · not public"]
-        Aggregate["aggregate CSV / controlled JSON / derived charts"]
-        Private["Outside the public repository"]
-        Raw -->|"aggregate only"| Aggregate
-        Raw -. not published .-> Private
+        Raw["request-level raw runs · 未公開"]
+        Aggregate["aggregate CSV／controlled JSON／derived charts"]
+        Private["不在公開 repository 中"]
+        Raw -->|"僅發佈 aggregate"| Aggregate
+        Raw -. 未發布 .-> Private
     end
 
-    subgraph Verification["4 · Verification"]
+    subgraph Verification["4 · 驗證"]
         direction LR
         Provenance["provenance.json · versions · method · artifact class · SHA-256"]
-        Claims["claims.json · canonical display claims"]
+        Claims["claims.json · canonical claims"]
         Checks["release checks"]
         Provenance --> Checks
         Claims --> Checks
     end
 
-    subgraph Presentation["5 · Presentation"]
+    subgraph Presentation["5 · 呈現"]
         direction LR
         Readme["README"]
         Eval["EVAL_REPORT"]

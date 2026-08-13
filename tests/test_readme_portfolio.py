@@ -111,7 +111,12 @@ def test_readme_diagrams_preserve_semantic_groups_and_rendering_contracts():
     _assert_high_contrast_class_defs(system_context, {"actor", "runtime", "data", "external"})
 
     assert "sequenceDiagram" in failover_lifecycle
-    for participant in ("Client", "Gateway", "Primary as Primary Backend", "Fallback as Fallback Backend"):
+    for participant in (
+        "Client",
+        "Gateway",
+        "Primary as Primary Backend",
+        "Fallback as Fallback Backend",
+    ):
         assert f"participant {participant}" in failover_lifecycle
     for removed_participant in ("Telemetry", "Limiter"):
         assert f"participant {removed_participant}" not in failover_lifecycle
