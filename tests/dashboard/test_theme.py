@@ -11,7 +11,8 @@ def test_theme_contains_accessible_type_and_semantic_tokens() -> None:
     assert "html { font-size: 18px; }" in css
     assert "font-size: 16px" in css
     assert (
-        'p, label, [data-testid="stMarkdownContainer"] { font-size:16px; line-height:1.5; }' in css
+        'p, label, [data-testid="stMarkdownContainer"] { font-size:16px !important; line-height:1.5; }'
+        in css
     )
     assert "prefers-reduced-motion" in css
     assert "font-size:.72rem" not in css
