@@ -26,30 +26,30 @@ structure.
 
 **Interfaces:**
 - Consumes: `.metric-grid.metric-count-7` and its `.metric-card`, `.metric-label`, `.metric-value`, and `.metric-detail` descendants.
-- Produces: a vertical seven-cell ribbon at desktop, four-plus-three below 1180 px, and two columns below 760 px.
+- Produces: a vertical seven-cell ribbon at desktop, four-plus-three below 1320 px, and two columns below 760 px.
 
-- [ ] **Step 1: Write a failing theme contract test**
+- [x] **Step 1: Write a failing theme contract test**
 
 Assert that `.metric-count-7 .metric-card` uses a single-column grid, compact minimum height, and
 that its labels use `white-space:nowrap` without any `word-break` rule.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run `uv run pytest tests/dashboard/test_theme.py::test_seven_metric_ribbon_uses_vertical_density -q`.
 Expected: FAIL because the count-specific layout does not exist.
 
-- [ ] **Step 3: Implement the count-specific CSS**
+- [x] **Step 3: Implement the count-specific CSS**
 
 Add a vertical grid-area override for `.metric-count-7 .metric-card`, tighten row spacing, prevent
 intra-word label wrapping, and add responsive height overrides inside the existing media queries.
 
-- [ ] **Step 4: Verify GREEN and the rendered page**
+- [x] **Step 4: Verify GREEN and the rendered page**
 
 Run the focused test, then inspect Request records at `http://127.0.0.1:8501/`. Confirm all seven
 values are visible, the ribbon is materially shorter, labels do not split, and the table begins
 immediately after the summary.
 
-- [ ] **Step 5: Run full verification and commit**
+- [x] **Step 5: Run full verification and commit**
 
 Run `uv run pytest -q`, Ruff lint/format, release checks, detector, and `git diff --check`, then commit
 the scoped files.

@@ -65,6 +65,10 @@ h3 { font-size: 1.24rem !important; margin: 1.05rem 0 .4rem !important; }
 .metric-label { grid-area:label; color:var(--ink-muted); font-size:17px; font-weight:800; letter-spacing:.055em; }
 .metric-value { grid-area:value; margin:0; color:var(--ink); font-size:clamp(1.5rem,2vw,1.9rem); font-weight:820; line-height:1.1; font-variant-numeric:tabular-nums; }
 .metric-detail { grid-area:detail; color:var(--ink-muted); font-size:17px; }
+.metric-count-7 .metric-card { min-height:112px; grid-template-columns:minmax(0,1fr); grid-template-areas:"label" "value" "detail"; grid-template-rows:auto auto auto; align-content:center; align-items:start; row-gap:.18rem; padding:.7rem .9rem; }
+.metric-count-7 .metric-label { white-space:nowrap; }
+.metric-count-7 .metric-value { margin:.04rem 0; font-size:clamp(1.45rem,1.75vw,1.85rem); }
+.metric-count-7 .metric-detail { overflow-wrap:normal; word-break:normal; line-height:1.35; }
 .status-card { padding:.75rem .15rem; border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; }
 .status-card strong { font-size:1rem; }
 .status-card small { font-size:17px; line-height:1.45; }
@@ -106,8 +110,9 @@ div[role="radiogroup"] label:has(input:checked) { border-bottom-color:var(--heal
 .stButton button, .stDownloadButton button { min-height:2.6rem; border-radius:6px; font-weight:750; }
 div[data-baseweb="select"] > div { border-radius:6px; }
 *:focus-visible { outline:3px solid rgba(120,144,154,.52) !important; outline-offset:2px; }
-@media (max-width: 1180px) {
+@media (max-width: 1320px) {
   .metric-count-7 { --metric-columns:4; }
+  .metric-count-7 .metric-card { min-height:104px; }
   .metric-count-7 .metric-card:nth-child(5) { border-left:0; }
   .metric-count-7 .metric-card:nth-child(n+5) { border-top:1px solid var(--border); }
 }
@@ -118,6 +123,7 @@ div[data-baseweb="select"] > div { border-radius:6px; }
   .ops-title, h1 { font-size:clamp(1.75rem, 7.4vw, 1.9rem) !important; }
   .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:0; }
   .metric-card { min-height:100px; display:block; }
+  .metric-count-7 .metric-card { min-height:100px; display:block; }
   .metric-card:nth-child(odd) { border-left:0; }
   .metric-card:nth-child(even) { border-left:1px solid var(--border); }
   .metric-card:nth-child(n+3) { border-top:1px solid var(--border); }

@@ -11,7 +11,7 @@ Use a compact vertical hierarchy inside each of the seven equal metric cells: la
 supporting detail. The current side-by-side label/value layout is retained for other metric counts;
 only `metric-count-7` becomes a compact ribbon.
 
-At desktop widths the seven metrics remain in one row. Below 1180 px they use the existing four-plus-
+At desktop widths the seven metrics remain in one row. Below 1320 px they use the existing four-plus-
 three grid, and below 760 px they use the existing two-column grid. Labels must not split inside a
 word. Values remain the strongest element and supporting detail remains at the approved readable
 type size.

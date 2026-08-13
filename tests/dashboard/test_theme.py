@@ -77,6 +77,28 @@ def test_theme_uses_flat_instrument_surfaces() -> None:
     assert ".chart-key-item.latency .chart-key-line::after { background:#B56F45; }" in css
 
 
+def test_seven_metric_ribbon_uses_vertical_density() -> None:
+    css = build_theme_css()
+    card_rule = re.search(r"\.metric-count-7 \.metric-card \{([^}]*)\}", css)
+    label_rule = re.search(r"\.metric-count-7 \.metric-label \{([^}]*)\}", css)
+    detail_rule = re.search(r"\.metric-count-7 \.metric-detail \{([^}]*)\}", css)
+
+    assert card_rule is not None
+    assert label_rule is not None
+    assert detail_rule is not None
+    assert 'grid-template-areas:"label" "value" "detail"' in card_rule.group(1)
+    assert "grid-template-columns:minmax(0,1fr)" in card_rule.group(1)
+    assert "min-height:112px" in card_rule.group(1)
+    assert "white-space:nowrap" in label_rule.group(1)
+    assert "word-break" not in label_rule.group(1)
+    assert "overflow-wrap:normal" in detail_rule.group(1)
+    assert "word-break:normal" in detail_rule.group(1)
+    assert ".metric-count-7 .metric-card { min-height:104px; }" in css
+    assert ".metric-count-7 .metric-card { min-height:100px; display:block; }" in css
+    assert "@media (max-width: 1320px)" in css
+    assert "@media (max-width: 1180px)" not in css
+
+
 def test_metric_formatter_never_turns_missing_into_zero() -> None:
     assert format_metric(None, " ms") == "—"
     assert format_metric(float("nan"), " ms") == "—"
