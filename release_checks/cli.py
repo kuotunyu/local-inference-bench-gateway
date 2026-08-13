@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from release_checks.ci_policy import verify_ci_policy
 from release_checks.docker_policy import verify_docker_policy
 from release_checks.documents import verify_documents
 from release_checks.evidence import verify_evidence
@@ -24,6 +25,7 @@ def main() -> int:
         ("publication", lambda: verify_publication(repo_root, export_mode=args.export_mode)),
         ("evidence", lambda: verify_evidence(repo_root)),
         ("documents", lambda: verify_documents(repo_root)),
+        ("ci", lambda: verify_ci_policy(repo_root)),
         ("docker", lambda: verify_docker_policy(repo_root)),
     )
     total = 0

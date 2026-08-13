@@ -5,7 +5,7 @@ local GGUF inference frontends, while a FastAPI gateway provides model aliases, 
 failover, streaming pass-through, API-key auth, per-alias capacity limits, and local SQLite
 telemetry.
 
-This repository is a local release candidate. It contains source code and aggregate benchmark
+This public repository contains source code and aggregate benchmark
 evidence, but no model weights, inference-engine binaries, secrets, runtime database, or
 request-level raw benchmark runs.
 

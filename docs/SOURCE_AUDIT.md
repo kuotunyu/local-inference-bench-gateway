@@ -45,7 +45,8 @@ because those raw runs are not public.
 
 ## Destination policy
 
-All commits use only `kuotunyu <61350295+kuotunyu@users.noreply.github.com>`, contain no co-author
-trailer, and remain local with no remote configured. Publication policy checks audit tracked and
-non-ignored files plus commit metadata before the repository can be considered a release
-candidate.
+All commits use only `kuotunyu <61350295+kuotunyu@users.noreply.github.com>` and contain no
+co-author trailer. The repository was published only after the allowlist, reachable history, and
+local verification passed. Publication policy checks continue to audit tracked and non-ignored
+files plus reachable commit metadata; a configured remote is now an expected transport detail,
+not public payload.

@@ -49,7 +49,8 @@ contains no benchmark evidence or mocks and runs without root privileges.
 
 ## Release boundary
 
-The candidate remains local on `main`, has no configured remote, uses one approved author identity,
-and does not create a tag, pull request, hosted release, or model-registry update. Docker execution
-may be recorded as unavailable when the local daemon is stopped, but static Docker policy and CI
-smoke definitions remain required.
+The public repository uses `main`, one approved author identity, and a clean lineage that excludes
+the private source history. A configured Git remote is expected after publication and is not itself
+a disclosure violation; publication checks continue to audit reachable history, tracked and
+non-ignored files, evidence, documents, and Docker policy. Tags, hosted releases, raw benchmark
+runs, and model-registry updates remain separate, intentional owner actions.

@@ -120,9 +120,6 @@ def _history_violations(repo_root: Path) -> list[str]:
     merges = _git(repo_root, "rev-list", "--all", "--min-parents=2")
     if merges.returncode == 0 and merges.stdout.strip():
         violations.append("merge commit found in release history")
-    remotes = _git(repo_root, "remote")
-    if remotes.returncode == 0 and remotes.stdout.strip():
-        violations.append("Git remote is configured")
     return violations
 
 

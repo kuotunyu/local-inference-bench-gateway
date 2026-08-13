@@ -97,6 +97,28 @@ def test_publication_rejects_coauthor_trailer(tmp_path):
     assert any("co-author trailer" in violation for violation in violations)
 
 
+def test_publication_allows_configured_remote_after_release(tmp_path):
+    repo = _repo(tmp_path, {"README.md": "safe"})
+    _run(repo, "remote", "add", "origin", "https://github.com/example/project.git")
+
+    assert verify_publication(repo) == []
+
+
+def test_publication_remote_does_not_bypass_merge_history_policy(tmp_path):
+    repo = _repo(tmp_path, {"README.md": "safe"})
+    _run(repo, "remote", "add", "origin", "https://github.com/example/project.git")
+    _run(repo, "checkout", "-b", "feature")
+    (repo / "feature.txt").write_text("feature", encoding="utf-8")
+    _run(repo, "add", "feature.txt")
+    _run(repo, "commit", "-m", "feature")
+    _run(repo, "checkout", "main")
+    _run(repo, "merge", "--no-ff", "feature", "-m", "merge feature")
+
+    violations = verify_publication(repo)
+
+    assert any("merge commit" in violation for violation in violations), violations
+
+
 def test_publication_allows_expected_public_examples(tmp_path):
     repo = _repo(
         tmp_path,

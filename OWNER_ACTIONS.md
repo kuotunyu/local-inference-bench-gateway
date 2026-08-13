@@ -1,7 +1,9 @@
-# Owner actions before public release
+# Owner actions after public release
 
-No remote repository, push, tag, pull request, hosted release, or model-registry update was
-created by this release preparation.
+The Public GitHub Repository is available at
+<https://github.com/kuotunyu/local-inference-bench-gateway>. The local `main` branch tracks
+`origin/main`. No tag, hosted release, raw benchmark run, or model-registry update has been
+published.
 
 ## Completed local verification
 
@@ -13,17 +15,12 @@ command and the subsequent volume/orphan cleanup both exited with status 0; no p
 containers, network, or volumes remained afterward. No GPU, model server, or model download was
 used.
 
-## Required owner decisions
+## Remaining owner decisions
 
-1. **Review the public-facing repository metadata.** Choose the final repository name,
-   description, topics, visibility, branch protection, and vulnerability-reporting process.
-2. **Create the remote and publish intentionally.** Confirm `git remote -v` is empty, inspect the
-   complete local history, then create and push to the owner's chosen host. Do not import or merge
-   the private source history.
-3. **Review licenses at publication time.** Recheck the linked model and engine terms and preserve
+1. **Review licenses for future evidence updates.** Recheck the linked model and engine terms and preserve
    [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The scoped MIT license covers only original
    code authored by kuotunyu.
-4. **Decide whether raw benchmark runs will ever be public.** The release defaults to no. Any
+2. **Decide whether raw benchmark runs will ever be public.** The release defaults to no. Any
    later raw-data publication needs a separate privacy, size, and provenance review plus a new
    evidence schema.
 
