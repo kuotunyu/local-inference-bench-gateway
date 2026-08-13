@@ -8,10 +8,10 @@ REPO_ROOT = Path(__file__).parents[1]
 HERO_ASSET = REPO_ROOT / "docs" / "assets" / "operations-console-overview.png"
 README = REPO_ROOT / "README.md"
 PORTFOLIO_SECTION_ORDER = (
-    "一眼看重點",
-    "系統邊界（System Context）",
+    "工程能力與驗證範圍",
+    "系統邊界",
     "Request 與 Failover 流程",
-    "Benchmark 證據鏈（Evidence Pipeline）",
+    "Benchmark 證據鏈",
     "量測結果與解讀邊界",
     "Operations Console",
     "Quickstart",
@@ -71,6 +71,12 @@ def test_readme_has_zh_tw_portfolio_information_architecture():
     text = _readme()
     assert _level_two_headings(text) == list(PORTFOLIO_SECTION_ORDER)
     assert _level_two_headings(text)[-1] == "License"
+    for stale_heading in (
+        "## 一眼看重點",
+        "## 系統邊界（System Context）",
+        "## Benchmark 證據鏈（Evidence Pipeline）",
+    ):
+        assert stale_heading not in text
     assert "一眼看重點 · System Context · Benchmark Evidence · Quickstart · 延伸文件" not in text
     assert "![Operations Console Demo Mode](docs/assets/operations-console-overview.png)" in text
 
@@ -82,71 +88,71 @@ def test_readme_diagrams_preserve_semantic_groups_and_rendering_contracts():
 
     assert "flowchart TB" in system_context
     for group in (
-        'subgraph Entry["Entry points"]',
-        'subgraph Execution["Execution boundary"]',
-        'subgraph Observability["Runtime observability"]',
-        'subgraph Evidence["Published evidence"]',
+        'subgraph Entry["輸入端"]',
+        'subgraph Execution["執行邊界"]',
+        'subgraph Observability["執行期可觀測性"]',
+        'subgraph Evidence["已發布證據"]',
         "direction LR",
     ):
         assert group in system_context
     for edge in ("HTTP / SSE", "read-only SQLite", "aggregate evidence"):
         assert edge in system_context
-    for semantic_group in (
-        "OpenAI SDK / HTTP Client",
+    for label in (
+        "OpenAI SDK／HTTP Client",
         "Async Benchmark Client",
-        "FastAPI Gateway",
-        "Alias Routing / Capacity / Failover",
-        "External Backend engines",
+        "FastAPI Gateway · Alias Routing／Capacity／Failover",
+        "外部 Backend engines · llama.cpp／Ollama／LM Studio",
         "SQLite Telemetry",
         "Operations Console",
-        "llama.cpp / Ollama / LM Studio",
-        "Aggregate Artifacts",
-        "Digest + Claim Verifier",
-        "README / EVAL_REPORT / Operations Console",
+        "Aggregate artifacts",
+        "Digest／Claim Verifier",
     ):
-        assert semantic_group in system_context
+        assert label in system_context
     _assert_high_contrast_class_defs(system_context, {"actor", "runtime", "data", "external"})
 
     assert "sequenceDiagram" in failover_lifecycle
-    for participant in ("Client", "Gateway", "Primary", "Fallback", "Telemetry"):
+    for participant in ("Client", "Gateway", "Primary as Primary Backend", "Fallback as Fallback Backend"):
         assert f"participant {participant}" in failover_lifecycle
-    assert "participant Limiter" not in failover_lifecycle
+    for removed_participant in ("Telemetry", "Limiter"):
+        assert f"participant {removed_participant}" not in failover_lifecycle
     for lifecycle_boundary in (
+        "容量已滿 · 不排隊",
         "HTTP 429 + Retry-After",
-        "success or 4xx: no Failover",
-        "sanitized Failover event",
-        "slot held until end / failure / cancel",
-        "metadata-only request telemetry",
-        "release slot in finally",
+        "成功或 4xx · 不 Failover",
+        "connection／timeout／protocol／non-final 5xx",
+        "記錄去敏 Failover event",
+        "嘗試 Fallback Backend",
+        "Streaming：持有 slot 至結束／失敗／取消",
+        "記錄 metadata-only request telemetry",
+        "finally 釋放 slot",
     ):
         assert lifecycle_boundary in failover_lifecycle
+    assert '"fontSize": "20px"' in failover_lifecycle
+    assert "<br" not in failover_lifecycle
 
     assert "flowchart TB" in evidence_pipeline
     for stage in (
-        'subgraph Inputs["1 · Inputs"]',
-        'subgraph Measurement["2 · Measurement"]',
-        'subgraph Boundary["3 · Publication boundary"]',
-        'subgraph Verification["4 · Verification"]',
-        'subgraph Presentation["5 · Presentation"]',
+        'subgraph Inputs["1 · 輸入"]',
+        'subgraph Measurement["2 · 量測"]',
+        'subgraph Boundary["3 · 發布邊界"]',
+        'subgraph Verification["4 · 驗證"]',
+        'subgraph Presentation["5 · 呈現"]',
     ):
         assert stage in evidence_pipeline
-    for semantic_group in (
-        "Synthetic calibrated prompts / workload matrix",
+    for label in (
+        "合成校準 prompts／workload matrix",
         "random 8-character nonce",
-        "Async Benchmark Client",
-        "one measured engine resident on GPU",
-        "request-level raw runs",
-        "not public",
-        "aggregate CSV / controlled JSON / derived charts",
+        "warmup 3 次 · 計時 5 次",
+        "每次僅一個受測 engine 常駐 GPU",
+        "request-level raw runs · 未公開",
+        "aggregate CSV／controlled JSON／derived charts",
+        "不在公開 repository 中",
         "provenance.json",
-        "claims.json",
+        "claims.json · canonical claims",
         "release checks",
-        "README",
-        "EVAL_REPORT",
-        "Operations Console",
     ):
-        assert semantic_group in evidence_pipeline
-    assert "-. not published .->" in evidence_pipeline
+        assert label in evidence_pipeline
+    assert "-. 未發布 .->" in evidence_pipeline
     _assert_high_contrast_class_defs(
         evidence_pipeline,
         {"input", "measurement", "artifact", "verification", "presentation", "unpublished"},
