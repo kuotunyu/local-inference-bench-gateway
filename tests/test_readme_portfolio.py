@@ -4,6 +4,8 @@ import re
 import struct
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).parents[1]
 HERO_ASSET = REPO_ROOT / "docs" / "assets" / "operations-console-overview.png"
 README = REPO_ROOT / "README.md"
@@ -18,6 +20,12 @@ PORTFOLIO_SECTION_ORDER = (
     "設計決策與誠實範圍",
     "Repository map 與延伸文件",
     "License",
+)
+EXPECTED_SEQUENCE_PARTICIPANTS = (
+    "participant Client",
+    "participant Gateway",
+    "participant Primary as Primary Backend",
+    "participant Fallback as Fallback Backend",
 )
 
 
@@ -67,6 +75,19 @@ def _assert_high_contrast_class_defs(block: str, expected_names: set[str]) -> No
         assert len(set(colors)) == len(colors)
 
 
+def _assert_exact_sequence_participants(block: str) -> None:
+    declarations = re.findall(
+        r"^[ \t]*(participant[ \t]+\S(?:.*\S)?)[ \t]*$", block, flags=re.MULTILINE
+    )
+    assert declarations == list(EXPECTED_SEQUENCE_PARTICIPANTS)
+
+
+def test_sequence_participant_contract_rejects_fifth_aliased_participant():
+    block = "\n".join((*EXPECTED_SEQUENCE_PARTICIPANTS, "participant T as Telemetry"))
+    with pytest.raises(AssertionError):
+        _assert_exact_sequence_participants(block)
+
+
 def test_readme_has_zh_tw_portfolio_information_architecture():
     text = _readme()
     assert _level_two_headings(text) == list(PORTFOLIO_SECTION_ORDER)
@@ -111,15 +132,7 @@ def test_readme_diagrams_preserve_semantic_groups_and_rendering_contracts():
     _assert_high_contrast_class_defs(system_context, {"actor", "runtime", "data", "external"})
 
     assert "sequenceDiagram" in failover_lifecycle
-    for participant in (
-        "Client",
-        "Gateway",
-        "Primary as Primary Backend",
-        "Fallback as Fallback Backend",
-    ):
-        assert f"participant {participant}" in failover_lifecycle
-    for removed_participant in ("Telemetry", "Limiter"):
-        assert f"participant {removed_participant}" not in failover_lifecycle
+    _assert_exact_sequence_participants(failover_lifecycle)
     expected_lifecycle = """\
     Client->>Gateway: POST /v1/chat/completions · Alias
     Gateway->>Gateway: auth · Alias validation · acquire slot
