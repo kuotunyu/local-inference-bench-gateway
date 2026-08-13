@@ -1,148 +1,235 @@
 # Local Inference Benchmark + OpenAI-Compatible Gateway
 
-An evidence-first, single-workstation portfolio project: one benchmark client compares three
-local GGUF inference frontends, while a FastAPI gateway provides model aliases, ordered
-failover, streaming pass-through, API-key auth, per-alias capacity limits, and local SQLite
-telemetry.
+[![CI](https://github.com/kuotunyu/local-inference-bench-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/kuotunyu/local-inference-bench-gateway/actions/workflows/ci.yml)
+![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-718B7A.svg)](LICENSE)
 
-This public repository contains source code and aggregate benchmark
-evidence, but no model weights, inference-engine binaries, secrets, runtime database, or
-request-level raw benchmark runs.
+一個 evidence-first 的本機推論工程專案：以共同 workload 比較 llama.cpp、Ollama 與 LM Studio，並提供具備 Alias Routing、ordered Failover、Backpressure、Streaming pass-through 與 SQLite Telemetry 的 OpenAI-compatible FastAPI Gateway。
 
-## Review it without a GPU
+這個 repository 將共同 Async Benchmark Client、OpenAI-compatible FastAPI Gateway 與 evidence-first Operations Console 組合成一個可審查系統。llama.cpp、Ollama 與 LM Studio 這些 Backend engines 都是另行安裝、啟動與管理的外部程序。
 
-The complete reviewer path is CPU-only and does not start an inference engine:
+[一眼看重點](#一眼看重點) · [System Context](#system-context) · [Benchmark Evidence](#benchmark-evidence-pipeline) · [Quickstart](#quickstart) · [延伸文件](#repository-map-與延伸文件)
 
-```bash
-uv sync --frozen --all-extras
-uv run --frozen ruff check .
-uv run --frozen ruff format --check .
-uv run --frozen pytest -q
-uv run --frozen python -m release_checks.cli
+![Operations Console Demo Mode](docs/assets/operations-console-overview.png)
+
+## 一眼看重點
+
+- 用同一個 Async Benchmark Client 與 workload matrix 比較三種本機 OpenAI-compatible Backend engines，同時保留可驗證的 aggregate evidence。
+- Gateway 讓用戶端只需使用穩定 Alias，由 Model Registry 依序嘗試 Backend；容量滿載時回覆 HTTP 429，不建立無上限的 in-memory queue。
+- Operations Console 清楚區分 Demo、Live 與 Benchmark Evidence，不把示範資料包裝成實際流量，也不把 aggregate artifact 當成 request-level raw data。
+- CPU-only reviewer 不需 GPU、模型權重或推論引擎，即可檢視 UI、重算 canonical claims 並執行 release policy checks。
+
+## System Context
+
+Repository-owned 元件負責協定、路由、證據與可觀測性；真正載入模型的 Backend engines 位於 repository 邊界外。Gateway 與 Benchmark Client 可獨立審查，但共用同一組外部 OpenAI-compatible engines。
+
+```mermaid
+flowchart LR
+    Client["OpenAI SDK / HTTP Client"]
+
+    subgraph Repo["Repository-owned components"]
+        Gateway["FastAPI Gateway"]
+        Registry["Model Registry + Alias Routing"]
+        Capacity["Capacity Limiter + Failover"]
+        Telemetry[("SQLite Telemetry")]
+        Console["Operations Console"]
+        Bench["Async Benchmark Client"]
+        Aggregates["Aggregate Artifacts"]
+        Verifier["Digest + Claim Verifier"]
+        Surfaces["README / EVAL_REPORT / Operations Console"]
+    end
+
+    subgraph External["External Backend engines"]
+        Engines["llama.cpp / Ollama / LM Studio"]
+    end
+
+    Client -->|"HTTP / SSE"| Gateway
+    Gateway --> Registry
+    Registry --> Capacity
+    Capacity --> Engines
+    Gateway --> Telemetry
+    Telemetry -->|"read-only SQLite"| Console
+    Bench --> Engines
+    Engines -->|"aggregate evidence"| Aggregates
+    Aggregates --> Verifier
+    Verifier --> Surfaces
+
+    classDef actor fill:#DBEAFE,stroke:#1D4ED8,stroke-width:2px,color:#172554;
+    classDef runtime fill:#DCFCE7,stroke:#15803D,stroke-width:2px,color:#052E16;
+    classDef data fill:#FEF3C7,stroke:#B45309,stroke-width:2px,color:#451A03;
+    classDef external fill:#F3E8FF,stroke:#7E22CE,stroke-width:2px,color:#3B0764;
+    class Client,Bench actor;
+    class Gateway,Registry,Capacity,Console,Verifier runtime;
+    class Telemetry,Aggregates,Surfaces data;
+    class Engines external;
 ```
 
-The evidence-only check uses the Python standard library and finishes without network, model,
-or GPU access:
+## Request 與 Failover lifecycle
 
-```bash
-uv run --frozen python -m release_checks.evidence
+Health poller 只提供觀測結果，不會成為 request-time routing oracle。每個 request 都依 Alias 的 ordered Backend chain 重新嘗試；4xx 通常代表共通的 request 問題，因此不觸發 Failover。
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant Limiter
+    participant Primary
+    participant Fallback
+    participant Telemetry
+
+    Client->>Gateway: POST /v1/chat/completions with Alias
+    Gateway->>Gateway: auth + envelope + Alias validation
+    Gateway->>Limiter: try_acquire
+    alt no capacity
+        Limiter-->>Gateway: rejected
+        Gateway-->>Client: HTTP 429 + Retry-After
+    else slot acquired
+        Limiter-->>Gateway: acquired
+        Gateway->>Gateway: resolve ordered Backend chain
+        Gateway->>Primary: attempt
+        alt primary success or 4xx
+            Primary-->>Gateway: response
+            Gateway-->>Client: return without Failover
+        else connection / timeout / protocol / non-final 5xx
+            Primary--xGateway: controlled failure category
+            Gateway->>Telemetry: sanitized Failover event
+            Gateway->>Fallback: fallback attempt
+            Fallback-->>Gateway: response
+        end
+        opt Streaming SSE
+            Gateway-->>Client: Streaming SSE
+            Note over Gateway,Limiter: hold slot until stream end / failure / cancellation
+        end
+        Gateway->>Telemetry: metadata-only request telemetry
+        Gateway->>Limiter: release slot in finally
+    end
 ```
 
-## Operations Console
+Streaming request 從上游連線開始到 stream 結束、失敗或取消之前都佔用 limiter slot。如果連線已開始後才發生讀取錯誤，Gateway 會終止 stream 並記錄受控類別，不會偽造 `[DONE]` 或中途切換 Backend。
 
-The Streamlit Operations Console turns the gateway's SQLite telemetry and the committed benchmark
-artifacts into one evidence-first interface. It is designed for both a first-time reviewer and a
-local operator:
+## Benchmark evidence pipeline
 
-- **Demo Mode** opens automatically when no compatible live database exists. Its deterministic
-  fixture is always labeled `DEMO DATA`; it is illustrative traffic, not an unpublished benchmark
-  run or production sample.
-- **Live Mode** reads `GATEWAY_DB_PATH` in read-only mode and shows request volume, success rate,
-  P50/P95 latency, Alias Routing, current Backend Health, Failover Events, observed Backpressure,
-  and a filterable Request Explorer.
-- **Benchmark Evidence** reads the committed aggregate CSV/JSON files, verifies their published
-  SHA-256 digests, and keeps measurement date, hardware, versions, method, and publication boundary
-  next to the charts.
+這條 pipeline 將可公開的 aggregate artifact 與未公開的 request-level raw runs 分開。每次 measured request 在 prompt 開頭加上 random nonce，避免 repeated prefix cache 改變 prefill 量測性質。
 
-No GPU, model, inference backend, gateway process, or runtime database is required to review Demo
-Mode and Benchmark Evidence:
+```mermaid
+flowchart LR
+    Inputs["Synthetic calibrated prompts + workload matrix"]
+    Nonce["random 8-character nonce"]
+    Client["Async Benchmark Client: 3 warmups + 5 timed runs"]
+    Resident["one measured engine resident on GPU at a time"]
+    Raw["request-level raw runs (not public)"]
+    Aggregate["aggregate CSV + controlled JSON + derived charts"]
+    Provenance["provenance.json: versions, method, artifact class, SHA-256"]
+    Checks["claims.json + release checks"]
+    Presentation["README + EVAL_REPORT + Operations Console"]
 
-```bash
-uv sync --frozen --extra dashboard
-uv run streamlit run dashboard/app.py --server.address 127.0.0.1
+    Inputs --> Nonce
+    Nonce --> Client
+    Client --> Resident
+    Resident -. publication boundary .-> Raw
+    Raw --> Aggregate
+    Aggregate --> Provenance
+    Provenance --> Checks
+    Checks --> Presentation
+
+    classDef input fill:#DBEAFE,stroke:#1D4ED8,stroke-width:2px,color:#172554;
+    classDef measurement fill:#DCFCE7,stroke:#15803D,stroke-width:2px,color:#052E16;
+    classDef artifact fill:#FEF3C7,stroke:#B45309,stroke-width:2px,color:#451A03;
+    classDef verification fill:#F3E8FF,stroke:#7E22CE,stroke-width:2px,color:#3B0764;
+    classDef presentation fill:#FFE4E6,stroke:#BE123C,stroke-width:2px,color:#4C0519;
+    classDef unpublished fill:#E5E7EB,stroke:#4B5563,stroke-width:2px,color:#111827;
+    class Inputs,Nonce input;
+    class Client,Resident measurement;
+    class Raw unpublished;
+    class Aggregate,Provenance artifact;
+    class Checks verification;
+    class Presentation presentation;
 ```
 
-The console deliberately does not invent queue depth, live GPU utilization, historical uptime, or
-SLA metrics that the current telemetry schema cannot prove.
+`bench/results/provenance.json` 記錄環境、方法、artifact class 與 SHA-256；`bench/results/claims.json` 再把每個 canonical display claim 綁定到可重算的 selector。Release checks 可驗證 aggregate integrity 與 claim 內容，但無法從未公開的原始 request 獨立重新彙總。
 
-## Recorded result snapshot
+## 量測結果與解讀邊界
 
-At concurrency 16, using one RTX 4090 and the pinned environment described in
-[EVAL_REPORT.md](EVAL_REPORT.md):
+以下是 **2026-07-17** 在單張 **NVIDIA GeForce RTX 4090** 與當時釘住的 model、driver、engine version 及 flags 所量得的 hardware- / version-specific snapshot：
 
 - llama.cpp: 625.55 tok/s at concurrency 16
 - Ollama: 704.98 tok/s at concurrency 16
 - LM Studio: 686.72 tok/s at concurrency 16
 - Gateway median TTFT overhead: 1.66 ms
 
-These are hardware- and version-specific measurements, not general rankings. The gap is not
-uniform across concurrency levels; at concurrency 8, for example, the spread is materially
-larger than at concurrency 16.
+這些數字不是跨硬體、跨版本或跨 workload 的引擎排名；三個引擎的差距也會隨 concurrency 改變。完整環境、方法、表格與解讀限制請見 [EVAL_REPORT.md](EVAL_REPORT.md)。
 
 ![Aggregate decode throughput by concurrency](bench/results/throughput_vs_concurrency.png)
 
-Each warmup and timed request received a random eight-character nonce at the start of its user
-prompt. Changing an early token invalidates the shared prefix, preventing repeated prompts from
-turning a prefill benchmark into a prefix-cache benchmark. The published prompt fixtures are
-synthetic calibrated inputs.
+## Operations Console
 
-## Architecture
+Operations Console 是 evidence-first 的 reviewer / operator 介面，但三個資料源回答的問題不同：
 
-```mermaid
-flowchart LR
-    Client["OpenAI SDK or HTTP client"] --> Gateway["FastAPI gateway\n:9000"]
-    Gateway -->|"primary"| BackendA["OpenAI-compatible backend A"]
-    Gateway -.->|"connection, timeout, protocol, or 5xx failover"| BackendB["backend B"]
-    Gateway --> DB[("SQLite request and failover telemetry")]
-    Dashboard["Streamlit dashboard"] --> DB
-    Bench["Async benchmark client"] --> Engines["llama.cpp / Ollama / LM Studio"]
-    Engines --> Aggregates["aggregate CSV + controlled JSON"]
-    Aggregates --> Claims["digest and claim verifier"]
+| 資料源 | Truth boundary |
+|---|---|
+| Demo | Demo Mode — deterministic illustrative fixture，非 production traffic |
+| Live | Live Mode — metadata-only local telemetry |
+| Evidence | Benchmark Evidence — aggregate evidence；request-level raw runs 未公開 |
+
+Demo Mode 不需 Gateway、GPU、model 或 runtime database。Live Mode 以 read-only 方式讀取 `GATEWAY_DB_PATH` 指向的 SQLite；Benchmark Evidence 則讀取已提交的 aggregate CSV / JSON、圖表與 provenance digest。Console 不推測當前 queue depth、live GPU utilization、historical uptime 或 SLA。
+
+## Quickstart
+
+### A. 啟動 loopback Operations Console
+
+```powershell
+uv sync --frozen --extra dashboard
+uv run streamlit run dashboard/app.py --server.address 127.0.0.1
 ```
 
-The health poller is observational only. Request-time failover always tries the ordered backend
-chain instead of trusting possibly stale health state. Capacity is rejected with HTTP 429 rather
-than queued indefinitely. Streaming keeps the limiter slot until the upstream stream closes.
+沒有可用的 Live database 時，Console 會以標示清楚的 Demo Mode 啟動。
 
-## Honest scope and limitations
+### B. 設定 registry 後啟動 loopback Gateway
 
-- This is a single-process, single-workstation reference system, not a multi-tenant production
-  control plane.
-- Aggregate summaries and charts are public; request-level raw runs are not. The release checks
-  verify published artifacts and recompute canonical claims, but cannot independently
-  re-aggregate the original requests.
-- The GPU benchmark was recorded on 2026-07-17 and is not rerun by CI or reviewer checks.
-- Failover covers connection failures, timeouts, malformed upstream JSON, and non-final 5xx
-  responses. It does not provide distributed consensus, cross-host scheduling, or durable queues.
-- SQLite is deliberately local. A multi-worker deployment needs a shared telemetry store and a
-  different concurrency-control design.
-- The observed effect of LM Studio's Unified KV Cache setting is measured; an explanation based
-  on internal allocation or scheduling behavior remains a hypothesis.
+先編輯 `gateway/models.yaml`，讓 Alias 指向你另行安裝與操作的 OpenAI-compatible Backend engines：
 
-## Repository map
-
-| Path | Purpose |
-|---|---|
-| `gateway/` | OpenAI-compatible routes, backend I/O, failover, auth, capacity, and SQLite logs |
-| `bench/` | Shared benchmark client, runner, analysis, aggregate evidence, and charts |
-| `release_checks/` | Network-free evidence and publication policy checks |
-| `tests/` | CPU-only behavioral, evidence, publication, documentation, and Docker-policy tests |
-| `dashboard/` | Demo/Live Operations Console plus committed Benchmark Evidence |
-| `docker/smoke/` | CPU-only mock backends and end-to-end smoke client |
-| `docs/SOURCE_AUDIT.md` | Source-to-public boundary and clean-lineage audit |
-| `docs/RELEASE_DESIGN.md` | Public release architecture and boundary decisions |
-
-## Start the local gateway
-
-See [SETUP.md](SETUP.md) for native and Docker setup. The shortest native development path is:
-
-```bash
+```powershell
+Copy-Item .env.example .env
 uv sync --frozen --extra dev
-copy .env.example .env
 uv run uvicorn gateway.app:app --host 127.0.0.1 --port 9000
 ```
 
-Edit `gateway/models.yaml` so its aliases point at OpenAI-compatible services you control. No
-backend is installed or started by this repository.
+### C. 執行 frozen CPU verification
 
-## Documentation
+```powershell
+uv sync --frozen --all-extras
+uv run --frozen pytest -q
+uv run --frozen python -m release_checks.cli
+```
 
-- [Evaluation report](EVAL_REPORT.md): environment, method, tables, evidence classes, caveats
-- [Design](DESIGN.md): gateway behavior and engineering tradeoffs
-- [Setup](SETUP.md): CPU reviewer flow, local runtime, and optional GPU reproduction boundary
-- [Production scaling](PRODUCTION_SCALING.md): what must change beyond one workstation
-- [Third-party notices](THIRD_PARTY_NOTICES.md): licensing and redistribution boundaries
-- [Owner actions](OWNER_ACTIONS.md): decisions intentionally left to the repository owner
+這個 repository **不會安裝或啟動 Backend engine**。CPU reviewer path 只使用 mocked HTTP backends、temporary SQLite 與靜態 aggregate evidence，不會連線 `gateway/models.yaml` 內的 engine URL。
 
-Original code is available under the scoped [MIT license](LICENSE). Third-party models, engines,
-packages, product names, and benchmark facts are not relicensed by that file.
+## 設計決策與誠實範圍
+
+- Gateway 是 **single-process** 的 **single-workstation** reference implementation。Process-local limiter 不會在多個 Uvicorn workers 之間共享計數；多機部署需要另一組 concurrency control 與 telemetry store 設計。
+- SQLite 只儲存 timestamp、Alias / Backend / model identifiers、stream flag、status、success、aggregate token counts、latency 與受控 failure category。它不儲存 request messages、authorization headers、raw upstream bodies 或 exception strings。
+- Failover 處理 connection error、timeout、protocol error 與 non-final 5xx，但不提供 distributed consensus、cross-host scheduling 或 durable queues。
+- 公開的 artifact 能支持 measured 與 derived claims，但不足以證明引擎內部 scheduler、memory allocation 或 cache mechanism 的成因。
+- GPU benchmark 不會在 CI 重跑；更換硬體、版本、model 或 flags 都是新實驗，不應靜默取代 2026-07-17 evidence snapshot。
+
+## Repository map 與延伸文件
+
+| Path | Purpose |
+|---|---|
+| `gateway/` | OpenAI-compatible routes、registry、Backend I/O、Failover、auth、capacity 與 SQLite logs |
+| `bench/` | Async Benchmark Client、workload、runner、analysis、aggregate evidence 與 charts |
+| `dashboard/` | Demo / Live Operations Console 與 committed Benchmark Evidence |
+| `release_checks/` | Network-free evidence、documentation 與 publication policy checks |
+| `tests/` | CPU-only behavior、evidence、publication、documentation 與 Docker-policy tests |
+| `docker/smoke/` | CPU-only mock Backend engines 與 end-to-end smoke client |
+
+- [EVAL_REPORT.md](EVAL_REPORT.md) — 量測環境、方法、數值、evidence classes 與 caveats
+- [DESIGN.md](DESIGN.md) — Gateway behavior、request lifecycle 與 engineering trade-offs
+- [SETUP.md](SETUP.md) — CPU reviewer、本機 runtime 與 optional GPU reproduction boundary
+- [PRODUCTION_SCALING.md](PRODUCTION_SCALING.md) — 離開單機邊界後必須改變的設計
+- [Third-party notices](THIRD_PARTY_NOTICES.md) — licensing 與 redistribution boundaries
+- [Source audit](docs/SOURCE_AUDIT.md) — source-to-public boundary 與 clean-lineage audit
+
+## License
+
+本 repository 的 original code 以 scoped [MIT License](LICENSE) 授權。第三方 models、engines、packages、產品名稱與 benchmark facts 不因此被重新授權。
