@@ -34,7 +34,7 @@
 - Produces mode values `Demo 模式` and `Live 模式`, while returning internal source kinds `demo` and `live`.
 - Preserves `main()` dispatch to the same four render functions.
 
-- [ ] **Step 1: Update shell tests first**
+- [x] **Step 1: Update shell tests first**
 
 Change the smoke-test page parameters to the four approved navigation values. Change the header
 assertion from `Local inference gateway` to `本機推論 Gateway`. Change the unavailable-live test to
@@ -45,7 +45,7 @@ Update the component test input from `("REQUESTS", "<60>", "selected window")` t
 `("REQUEST 數量", "<60>", "所選時間範圍")`. Update the state test to assert the localized fallback
 sentence while retaining exact command and `GATEWAY_DB_PATH` assertions.
 
-- [ ] **Step 2: Run shell tests and verify RED**
+- [x] **Step 2: Run shell tests and verify RED**
 
 Run:
 
@@ -55,7 +55,7 @@ uv run pytest tests/dashboard/test_dashboard_smoke.py tests/dashboard/test_compo
 
 Expected: failures mention old page values, subtitle, control labels, and mode copy.
 
-- [ ] **Step 3: Localize shell production strings**
+- [x] **Step 3: Localize shell production strings**
 
 Use these exact public values in `dashboard/app.py`:
 
@@ -71,7 +71,7 @@ Change the brand subtitle in `dashboard/components.py` to `本機推論 Gateway`
 `dashboard/state.py`, use `Live 模式暫時無法使用，已安全切換至 Demo 模式。` while preserving the
 recovery command and environment variable.
 
-- [ ] **Step 4: Verify and commit Task 1**
+- [x] **Step 4: Verify and commit Task 1**
 
 Run the focused tests plus Ruff on the six files, then commit:
 
@@ -96,7 +96,7 @@ git commit -m "feat: localize console shell to zh-TW"
   signature.
 - Changes only visible labels, helper text, headings, status strings, chart titles, and tooltips.
 
-- [ ] **Step 1: Add failing operational-copy assertions**
+- [x] **Step 1: Add failing operational-copy assertions**
 
 In `test_view_models.py`, assert that the Overview chart Y titles are `每 bucket Request 數` and
 `P95 latency / ms`, the Request tooltip title is `Request 數`, and the reliability failure-axis title
@@ -114,7 +114,7 @@ In `test_dashboard_smoke.py`, add a parameterized zh-TW-first copy check:
 
 Render each page and assert every expected fragment appears in combined Markdown or metric output.
 
-- [ ] **Step 2: Run operational tests and verify RED**
+- [x] **Step 2: Run operational tests and verify RED**
 
 Run:
 
@@ -124,7 +124,7 @@ uv run pytest tests/dashboard/test_view_models.py tests/dashboard/test_dashboard
 
 Expected: generated chart specs and rendered copy still contain the previous English labels.
 
-- [ ] **Step 3: Localize Overview**
+- [x] **Step 3: Localize Overview**
 
 In `dashboard/views/overview.py`:
 
@@ -139,7 +139,7 @@ In `dashboard/views/overview.py`:
 - use heading `Request 數量與 P95 latency`, a fully Chinese chart explanation, `無上限`,
   `近期 Failover`, and a Chinese empty-state sentence.
 
-- [ ] **Step 4: Localize Routing and Requests**
+- [x] **Step 4: Localize Routing and Requests**
 
 In `dashboard/views/reliability.py`, localize the lead, fixture note, routing invariant, capacity and
 resolved-model descriptions, health states, `Error 分類`, chart descriptors, `觀測到的 HTTP 429`,
@@ -151,7 +151,7 @@ In `dashboard/views/requests.py`, localize filter labels to `結果`, `Error 分
 `篩選後 REQUEST`, `筆符合條件`, `成功率`, `目前篩選結果`, `端到端 latency`, `有資料時顯示`,
 `Streaming 有資料時顯示`, `TOKEN 數量`, and `Upstream usage 不完整`.
 
-- [ ] **Step 5: Verify and commit Task 2**
+- [x] **Step 5: Verify and commit Task 2**
 
 Run focused tests and Ruff, then commit:
 
@@ -174,7 +174,7 @@ git commit -m "feat: localize operational views to zh-TW"
   artifact boundaries.
 - Localizes display-only headings, captions, KPI labels/details, chart titles, and method labels.
 
-- [ ] **Step 1: Add failing evidence-copy assertions**
+- [x] **Step 1: Add failing evidence-copy assertions**
 
 Add rendered smoke assertions for `C16 最高 THROUGHPUT`, `GATEWAY 額外成本`, `測量日期`,
 `PUBLIC RAW RUNS`, `測量方法與 provenance`, and `Artifact 無法使用` where the fixture permits.
@@ -183,7 +183,7 @@ Extend evidence spec tests so the throughput X title remains `Concurrency`, whil
 display headings are covered by the rendered smoke path. Retain all existing digest/wrong-shape
 tests unchanged.
 
-- [ ] **Step 2: Run evidence tests and verify RED**
+- [x] **Step 2: Run evidence tests and verify RED**
 
 Run:
 
@@ -193,7 +193,7 @@ uv run pytest tests/dashboard/test_evidence.py tests/dashboard/test_dashboard_sm
 
 Expected: English-only KPI labels and method headings fail the new rendered-copy contract.
 
-- [ ] **Step 3: Localize evidence production strings**
+- [x] **Step 3: Localize evidence production strings**
 
 In `dashboard/views/evidence.py`:
 
@@ -209,7 +209,7 @@ In `dashboard/views/evidence.py`:
   `Prefix-cache 控制`, without modifying provenance values;
 - replace display fallbacks `unavailable` with `無法使用` and retain scope limitations.
 
-- [ ] **Step 4: Verify and commit Task 3**
+- [x] **Step 4: Verify and commit Task 3**
 
 Run evidence tests, dashboard tests, and Ruff, then commit:
 
@@ -229,7 +229,7 @@ git commit -m "feat: localize benchmark evidence to zh-TW"
 - Consumes the completed four-view interface.
 - Produces recorded automated and rendered verification evidence.
 
-- [ ] **Step 1: Run complete automated verification**
+- [x] **Step 1: Run complete automated verification**
 
 Run:
 
@@ -243,24 +243,24 @@ uv run --frozen python -m release_checks.cli
 
 Expected: every command passes.
 
-- [ ] **Step 2: Run the Impeccable detector once**
+- [x] **Step 2: Run the Impeccable detector once**
 
 Run the detector on `dashboard/app.py`, `dashboard/components.py`, `dashboard/state.py`, and the four
 view files. Expected: no unexplained finding.
 
-- [ ] **Step 3: Inspect all views in one browser batch**
+- [x] **Step 3: Inspect all views in one browser batch**
 
 Restart `http://127.0.0.1:8502/`. Inspect all four views at desktop and 390 px. Verify navigation,
 controls, KPI labels, headings, helper text, error/empty states visible in the fixture, chart labels,
 and evidence captions. Confirm no horizontal overflow, rendered Streamlit exception, accidental
 translation of identifiers/data fields, or awkward Chinese line break.
 
-- [ ] **Step 4: Apply at most one correction and confirm once**
+- [x] **Step 4: Apply at most one correction and confirm once**
 
 If defects appear, add the smallest failing regression test, fix the copy in one batch, rerun the
 focused and complete checks, restart Streamlit, and perform one confirmation pass.
 
-- [ ] **Step 5: Record execution notes and commit**
+- [x] **Step 5: Record execution notes and commit**
 
 Append actual test counts, browser widths, and any justified term retained in original form, then:
 
@@ -271,3 +271,19 @@ git status --short
 ```
 
 Expected: the worktree is clean and the branch preview remains available for further UI iteration.
+
+## Execution Notes
+
+- TDD RED was observed for the shell, operational-view, evidence, and final consistency copy
+  contracts before production strings changed.
+- The evidence tests live in `tests/dashboard/test_evidence_view.py`; the plan's original
+  `test_evidence.py` filename was corrected during execution without changing scope.
+- Automated verification passed with 73 dashboard tests and 161 full repository tests, plus Ruff
+  lint/format and publication/evidence/document/docker release checks.
+- The Impeccable detector returned no findings for the shell, state, components, or four views.
+- Desktop 1280 px and mobile 390 px browser passes covered all four views with no horizontal
+  overflow or rendered Streamlit exception. One bounded correction localized the source badges,
+  Failover ratio detail, and `SQLite Telemetry` capitalization; the confirmation pass passed.
+- Schema fields, aliases, Backend and model names, filenames, routes, environment variables,
+  `P50`, `P95`, `TTFT`, `VRAM`, `concurrency`, `Artifact`, `provenance`, and `digest`
+  remain in original form by design.
