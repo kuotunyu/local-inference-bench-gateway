@@ -25,6 +25,17 @@ from dashboard.models import TelemetrySnapshot
 from gateway.registry import Registry
 
 DISPLAY_TIMEZONE = ZoneInfo("Asia/Taipei")
+ACTIVITY_INTERVALS = tuple(
+    pd.Timedelta(value)
+    for value in ("10min", "30min", "1h", "2h", "4h", "6h", "12h", "1D", "2D", "7D")
+)
+ACTIVITY_DOMAIN_PADDING = pd.Timedelta(minutes=5)
+
+
+@dataclass(frozen=True)
+class ActivityTimeGuide:
+    domain: tuple[datetime, datetime]
+    ticks: tuple[datetime, ...]
 
 
 @dataclass(frozen=True)
@@ -34,6 +45,30 @@ class OverviewModel:
     observed_to: datetime | None
     metrics: OverviewMetrics
     series: pd.DataFrame
+
+
+def _activity_time_guide(frame: pd.DataFrame) -> ActivityTimeGuide:
+    timestamps = pd.to_datetime(frame.get("timestamp"), utc=True, errors="coerce").dropna()
+    if timestamps.empty:
+        raise ValueError("activity chart requires a valid timestamp")
+    start = timestamps.min()
+    end = timestamps.max()
+    target = max((end - start) / 6, ACTIVITY_INTERVALS[0])
+    interval = next(
+        (candidate for candidate in ACTIVITY_INTERVALS if candidate >= target),
+        ACTIVITY_INTERVALS[-1],
+    )
+    tick_start = start.ceil(interval)
+    ticks = tuple(pd.date_range(tick_start, end, freq=interval).to_pydatetime())
+    if not ticks:
+        ticks = (start.to_pydatetime(),)
+    return ActivityTimeGuide(
+        domain=(
+            (start - ACTIVITY_DOMAIN_PADDING).to_pydatetime(),
+            (end + ACTIVITY_DOMAIN_PADDING).to_pydatetime(),
+        ),
+        ticks=ticks,
+    )
 
 
 def _bounds(frame: pd.DataFrame) -> tuple[datetime | None, datetime | None]:
@@ -74,13 +109,28 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
     """Combine request volume and latency without compressing either scale."""
     frame = series.copy()
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+    frame = frame.dropna(subset=["timestamp"])
+    guide = _activity_time_guide(frame)
+    x_encoding = alt.X(
+        "timestamp:T",
+        title=None,
+        scale=alt.Scale(domain=list(guide.domain), nice=False),
+        axis=alt.Axis(
+            values=list(guide.ticks),
+            format="%H:%M",
+            labelAngle=0,
+            labelOverlap="greedy",
+            tickSize=6,
+            tickWidth=1.25,
+            tickColor="#7B867F",
+            domainColor="#7B867F",
+        ),
+    )
     requests = (
         alt.Chart(frame)
-        .mark_bar(
-            color="#718B7A", opacity=0.78, size=34, cornerRadiusTopLeft=5, cornerRadiusTopRight=5
-        )
+        .mark_bar(color="#5F7F6B", opacity=0.9, size=46)
         .encode(
-            x=alt.X("timestamp:T", title=None, axis=alt.Axis(format="%H:%M", labelAngle=0)),
+            x=x_encoding,
             y=alt.Y("requests:Q", title="Requests / bucket", axis=alt.Axis(titleColor="#566F60")),
             tooltip=[
                 alt.Tooltip("timestamp:T", title="時間", format="%Y/%m/%d %H:%M"),
@@ -91,12 +141,12 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
     latency = (
         alt.Chart(frame)
         .mark_line(
-            color="#B1815F",
-            strokeWidth=3,
-            point=alt.OverlayMarkDef(color="#B1815F", size=76, filled=True, strokeWidth=1.5),
+            color="#B56F45",
+            strokeWidth=4,
+            point=alt.OverlayMarkDef(color="#B56F45", size=96, filled=True, strokeWidth=2),
         )
         .encode(
-            x=alt.X("timestamp:T", title=None, axis=alt.Axis(format="%H:%M", labelAngle=0)),
+            x=x_encoding,
             y=alt.Y(
                 "p95_latency_ms:Q",
                 title="P95 latency / ms",
