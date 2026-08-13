@@ -83,7 +83,7 @@ def render_reliability(
         "路由與可靠性分析",
         "對照 Alias Routing、Request-time Failover、Backend Health 與 Backpressure，檢視路由決策及失效處理。",
     )
-    note = "SQLite telemetry + models.yaml"
+    note = "SQLite Telemetry + models.yaml"
     if source_kind == "demo":
         note += " · 示範 fixture"
     render_source_badge(source_kind, note)

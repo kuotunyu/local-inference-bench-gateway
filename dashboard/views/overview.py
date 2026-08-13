@@ -238,7 +238,11 @@ def render_overview(
         (
             "FAILOVER 次數",
             f"{metrics.failover_count:,}",
-            format_metric(metrics.failover_rate_pct, "% of requests", digits=2),
+            (
+                "—"
+                if metrics.failover_rate_pct is None
+                else f"占 Request 的 {metrics.failover_rate_pct:,.2f}%"
+            ),
         ),
     ]
     render_metric_grid(cards)

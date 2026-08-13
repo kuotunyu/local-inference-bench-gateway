@@ -74,10 +74,20 @@ def test_console_views_render_neutral_scientific_titles(
 @pytest.mark.parametrize(
     ("page", "expected"),
     [
-        ("系統總覽", ["REQUEST 數量", "成功率", "FAILOVER 次數", "近期 Failover"]),
+        (
+            "系統總覽",
+            [
+                "DEMO 資料",
+                "REQUEST 數量",
+                "成功率",
+                "FAILOVER 次數",
+                "占 Request 的 5.00%",
+                "近期 Failover",
+            ],
+        ),
         (
             "Routing 與可靠性",
-            ["Error 分類", "觀測到的 HTTP 429", "Failover event"],
+            ["SQLite Telemetry", "Error 分類", "觀測到的 HTTP 429", "Failover event"],
         ),
         ("Request 紀錄", ["篩選後 REQUEST", "成功率", "TOKEN 數量"]),
     ],
@@ -107,6 +117,7 @@ def test_benchmark_evidence_uses_zh_tw_first_copy(tmp_path: Path, monkeypatch) -
         "測量日期",
         "PUBLIC RAW RUNS",
         "測量方法與 provenance",
+        "● 證據",
     ]
     assert not app.exception
     assert all(fragment in visible for fragment in expected)

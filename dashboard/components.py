@@ -32,7 +32,7 @@ def format_metric(value: float | int | None, suffix: str = "", *, digits: int = 
 
 
 def render_source_badge(kind: str, note: str) -> None:
-    label = {"demo": "DEMO DATA", "live": "LIVE", "evidence": "EVIDENCE"}.get(kind, kind.upper())
+    label = {"demo": "DEMO 資料", "live": "LIVE", "evidence": "證據"}.get(kind, kind.upper())
     st.markdown(
         f'<div class="source-line"><span class="source-badge {escape_html(kind)}">'
         f'● {escape_html(label)}</span><span class="source-note">{escape_html(note)}</span></div>',
