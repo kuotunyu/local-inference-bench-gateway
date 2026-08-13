@@ -30,6 +30,10 @@ def test_theme_contains_accessible_type_and_semantic_tokens() -> None:
 def test_theme_uses_flat_instrument_surfaces() -> None:
     css = build_theme_css()
     assert ".metric-grid" in css
+    assert "grid-template-columns:repeat(var(--metric-columns),minmax(0,1fr))" in css
+    assert ".metric-count-7 { --metric-columns:7; }" in css
+    assert ".metric-count-7 .metric-card:nth-child(5)" in css
+    assert ".metric-count-7 .metric-card:nth-child(n+5)" in css
     assert "border-top:1px solid var(--border)" in css
     assert "border-bottom:1px solid var(--border)" in css
     assert ".metric-card" in css

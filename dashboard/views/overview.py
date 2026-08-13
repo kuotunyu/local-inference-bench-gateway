@@ -111,6 +111,7 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
     frame = frame.dropna(subset=["timestamp"])
     guide = _activity_time_guide(frame)
+    bucket_slots = max(len(frame) + 2, 9)
     x_encoding = alt.X(
         "timestamp:T",
         title=None,
@@ -131,7 +132,7 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
         .mark_bar(
             color="#5F7F6B",
             opacity=0.9,
-            size=alt.ExprRef(expr="min(46, width / 9)"),
+            size=alt.ExprRef(expr=f"min(46, width / {bucket_slots} * 0.72)"),
         )
         .encode(
             x=x_encoding,

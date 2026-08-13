@@ -60,7 +60,7 @@ def metric_grid_html(cards: list[MetricCard]) -> str:
         "</div>"
         for label, value, detail in cards
     )
-    return f'<div class="metric-grid">{items}</div>'
+    return f'<div class="metric-grid metric-count-{len(cards)}">{items}</div>'
 
 
 def render_metric_grid(cards: list[MetricCard]) -> None:

@@ -52,7 +52,14 @@ h3 { font-size: 1.24rem !important; margin: 1.05rem 0 .4rem !important; }
 .source-badge.live { background:#DCE7DE; color:#355044; }
 .source-badge.evidence { background:#DDE5E8; color:#405B65; }
 .source-note { color:var(--ink-muted); font-size:17px; }
-.metric-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:0; margin:.1rem 0 .45rem; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+.metric-grid { display:grid; grid-template-columns:repeat(var(--metric-columns),minmax(0,1fr)); gap:0; margin:.1rem 0 .45rem; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+.metric-count-1 { --metric-columns:1; }
+.metric-count-2 { --metric-columns:2; }
+.metric-count-3 { --metric-columns:3; }
+.metric-count-4 { --metric-columns:4; }
+.metric-count-5 { --metric-columns:5; }
+.metric-count-6 { --metric-columns:6; }
+.metric-count-7 { --metric-columns:7; }
 .metric-card { min-height:88px; display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"label value" "detail value"; column-gap:.8rem; align-items:center; padding:.68rem .85rem; border:0; border-left:1px solid var(--border); border-radius:0; background:transparent; box-shadow:none; }
 .metric-card:first-child { border-left:0; }
 .metric-label { grid-area:label; color:var(--ink-muted); font-size:17px; font-weight:800; letter-spacing:.055em; }
@@ -81,6 +88,11 @@ div[role="radiogroup"] label:has(input:checked) { border-bottom-color:var(--heal
 .stButton button, .stDownloadButton button { min-height:2.6rem; border-radius:6px; font-weight:750; }
 div[data-baseweb="select"] > div { border-radius:6px; }
 *:focus-visible { outline:3px solid rgba(120,144,154,.52) !important; outline-offset:2px; }
+@media (max-width: 1180px) {
+  .metric-count-7 { --metric-columns:4; }
+  .metric-count-7 .metric-card:nth-child(5) { border-left:0; }
+  .metric-count-7 .metric-card:nth-child(n+5) { border-top:1px solid var(--border); }
+}
 @media (max-width: 760px) {
   html { font-size: 16px; }
   p, label, [data-testid="stMarkdownContainer"] { font-size:16px; line-height:1.5; }

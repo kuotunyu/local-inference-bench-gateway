@@ -25,9 +25,16 @@ def test_page_heading_uses_a_two_column_scientific_structure() -> None:
 def test_metric_grid_is_compact_and_escapes_values() -> None:
     markup = metric_grid_html([("REQUESTS", "<60>", "selected window")])
 
-    assert 'class="metric-grid"' in markup
+    assert 'class="metric-grid metric-count-1"' in markup
     assert "&lt;60&gt;" in markup
     assert "<60>" not in markup
     assert 'class="metric-label"' in markup
     assert 'class="metric-detail"' in markup
     assert 'class="metric-value"' in markup
+
+
+def test_metric_grid_exposes_cardinality_for_stable_responsive_layout() -> None:
+    markup = metric_grid_html([(f"METRIC {index}", str(index), "detail") for index in range(7)])
+
+    assert 'class="metric-grid metric-count-7"' in markup
+    assert markup.count('class="metric-card"') == 7

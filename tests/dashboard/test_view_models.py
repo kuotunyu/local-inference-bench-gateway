@@ -35,7 +35,7 @@ def test_overview_activity_chart_uses_full_operational_canvas(tmp_path: Path) ->
     assert len(spec["layer"]) == 2
     assert spec["resolve"]["scale"]["y"] == "independent"
     bar, line = spec["layer"]
-    assert bar["mark"]["size"] == {"expr": "min(46, width / 9)"}
+    assert bar["mark"]["size"] == {"expr": "min(46, width / 9 * 0.72)"}
     assert bar["mark"]["color"] == "#5F7F6B"
     assert bar["mark"]["opacity"] == 0.9
     assert line["mark"]["strokeWidth"] == 4
@@ -72,6 +72,34 @@ def test_activity_time_guide_uses_one_hour_ticks_for_six_hours() -> None:
 
     assert [tick.minute for tick in guide.ticks] == [0] * 6
     assert [tick.hour for tick in guide.ticks] == [1, 2, 3, 4, 5, 6]
+
+
+def test_activity_bar_width_scales_with_six_hour_bucket_density() -> None:
+    frame = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2026-08-13T00:00:00Z", periods=37, freq="10min"),
+            "requests": [10] * 37,
+            "p95_latency_ms": [500] * 37,
+        }
+    )
+
+    spec = build_activity_chart(frame).to_dict()
+
+    assert spec["layer"][0]["mark"]["size"] == {"expr": "min(46, width / 39 * 0.72)"}
+
+
+def test_activity_bar_width_scales_with_twenty_four_hour_bucket_density() -> None:
+    frame = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2026-08-13T00:00:00Z", periods=145, freq="10min"),
+            "requests": [10] * 145,
+            "p95_latency_ms": [500] * 145,
+        }
+    )
+
+    spec = build_activity_chart(frame).to_dict()
+
+    assert spec["layer"][0]["mark"]["size"] == {"expr": "min(46, width / 147 * 0.72)"}
 
 
 def test_health_is_current_observation_not_uptime(tmp_path: Path) -> None:
