@@ -8,10 +8,10 @@ from dashboard.charts import chart_theme, line_chart
 def test_chart_theme_has_readable_axes_and_legend() -> None:
     config = chart_theme()
 
-    assert config["axis"]["labelFontSize"] >= 14
-    assert config["axis"]["titleFontSize"] >= 15
-    assert config["legend"]["labelFontSize"] >= 14
-    assert config["legend"]["titleFontSize"] >= 14
+    assert config["axis"]["labelFontSize"] >= 15
+    assert config["axis"]["titleFontSize"] >= 16
+    assert config["legend"]["labelFontSize"] >= 15
+    assert config["legend"]["titleFontSize"] >= 15
 
 
 def test_line_chart_uses_visible_marks_and_requested_height() -> None:
@@ -35,4 +35,4 @@ def test_line_chart_uses_visible_marks_and_requested_height() -> None:
     assert spec["height"] == 400
     assert spec["mark"]["strokeWidth"] >= 2.5
     assert spec["mark"]["point"]["size"] >= 60
-    assert spec["config"]["axis"]["labelFontSize"] >= 14
+    assert spec["config"]["axis"]["labelFontSize"] >= 15

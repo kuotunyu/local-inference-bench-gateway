@@ -187,7 +187,9 @@ def test_views_use_neutral_scientific_titles() -> None:
 
 
 def test_editorial_headlines_are_removed() -> None:
-    source = "".join(path.read_text(encoding="utf-8") for path in Path("dashboard/views").glob("*.py"))
+    source = "".join(
+        path.read_text(encoding="utf-8") for path in Path("dashboard/views").glob("*.py")
+    )
     for headline in (
         "推論系統，一眼掌握。",
         "不是漂亮圖表，是可追溯的行為。",
@@ -314,10 +316,7 @@ uv run pytest tests/dashboard -q
 uv run pytest -q
 uv run ruff check .
 uv run ruff format --check .
-uv run python scripts/check_publication.py
-uv run python scripts/check_evidence.py
-uv run python scripts/check_documents.py
-uv run python scripts/check_docker_release.py
+uv run --frozen python -m release_checks.cli
 ```
 
 Expected: all dashboard tests, full repository tests, Ruff checks, and release checks pass.
@@ -348,3 +347,17 @@ git status --short
 ```
 
 Expected: commit succeeds and the worktree is clean.
+
+## Execution notes
+
+- The first baseline run used `uv sync --frozen`, which installs only runtime dependencies. The
+  isolated worktree was corrected with `uv sync --frozen --all-extras` before baseline testing.
+- Task 2 uses real `streamlit.testing.v1.AppTest` render assertions for the brand and four view
+  titles. The proposed source-text change detectors were intentionally omitted because they would
+  test file contents instead of rendered behavior.
+- The repository's release-check entry point is `uv run --frozen python -m release_checks.cli`;
+  the four nonexistent `scripts/check_*.py` commands in the initial plan were corrected before
+  final verification.
+- Browser verification covered all four views at desktop width and 390 px mobile. The existing
+  Altair `Infinite extent` initialization warning was reproduced unchanged on the pre-merge main
+  server and is not attributable to this refinement.
