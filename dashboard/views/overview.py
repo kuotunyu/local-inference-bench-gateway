@@ -128,7 +128,11 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
     )
     requests = (
         alt.Chart(frame)
-        .mark_bar(color="#5F7F6B", opacity=0.9, size=46)
+        .mark_bar(
+            color="#5F7F6B",
+            opacity=0.9,
+            size=alt.ExprRef(expr="min(46, width / 9)"),
+        )
         .encode(
             x=x_encoding,
             y=alt.Y("requests:Q", title="Requests / bucket", axis=alt.Axis(titleColor="#566F60")),

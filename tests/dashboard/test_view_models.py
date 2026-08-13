@@ -35,7 +35,7 @@ def test_overview_activity_chart_uses_full_operational_canvas(tmp_path: Path) ->
     assert len(spec["layer"]) == 2
     assert spec["resolve"]["scale"]["y"] == "independent"
     bar, line = spec["layer"]
-    assert bar["mark"]["size"] == 46
+    assert bar["mark"]["size"] == {"expr": "min(46, width / 9)"}
     assert bar["mark"]["color"] == "#5F7F6B"
     assert bar["mark"]["opacity"] == 0.9
     assert line["mark"]["strokeWidth"] == 4
