@@ -39,4 +39,4 @@ def test_missing_registry_does_not_block_evidence(tmp_path: Path, monkeypatch) -
     app.radio[0].set_value("Benchmark Evidence").run(timeout=20)
 
     assert not app.exception
-    assert any("BENCHMARK EVIDENCE" in item.value for item in app.markdown)
+    assert any("快，不夠。還要知道為什麼可信。" in item.value for item in app.markdown)

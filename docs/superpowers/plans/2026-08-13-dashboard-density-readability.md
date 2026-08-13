@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Page titles use a desktop range of 2.15–2.65 rem; mobile titles use 1.85–2.05 rem.
+- Page titles use a desktop range of 2–2.25 rem; mobile titles use 1.75–1.9 rem.
 - Primary body copy is 17 px; supporting copy, source notes, KPI labels, captions, axes, and legends are at least 14 px.
 - Primary charts use a full-width 380–420 px canvas; narrow-screen charts retain at least 320 px height.
 - Preserve Traditional Chinese copy, original technical terms, current Morandi semantic colors, and all telemetry/evidence semantics.
@@ -39,10 +39,11 @@ def test_chart_theme_has_readable_axes_and_legend() -> None:
     assert config["axis"]["titleFontSize"] >= 15
     assert config["legend"]["labelFontSize"] >= 14
 
+
 def test_theme_uses_compact_title_and_readable_body() -> None:
     css = build_theme_css()
     assert "font-size: 17px" in css
-    assert "2.65rem" in css
+    assert "2.25rem" in css
     assert "3.55rem" not in css
 ```
 
@@ -164,7 +165,7 @@ Run: `uv run --frozen python -m release_checks.cli`
 
 - [ ] **Step 2: Run the Impeccable mechanical detector once**
 
-Run: `node C:\Users\3Hml\.codex\skills\impeccable\scripts\detect.mjs --json dashboard/app.py dashboard/theme.py dashboard/charts.py dashboard/views`
+Run: `node "$env:USERPROFILE\.codex\skills\impeccable\scripts\detect.mjs" --json dashboard/app.py dashboard/theme.py dashboard/charts.py dashboard/views`
 
 - [ ] **Step 3: Perform one batched browser inspection**
 

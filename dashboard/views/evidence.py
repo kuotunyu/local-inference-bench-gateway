@@ -11,7 +11,7 @@ import streamlit as st
 from dashboard.charts import bar_chart, line_chart
 from dashboard.components import (
     format_metric,
-    render_metric_card,
+    render_metric_grid,
     render_page_heading,
     render_source_badge,
     render_state_message,
@@ -66,7 +66,7 @@ def build_throughput_chart(concurrency: pd.DataFrame) -> alt.Chart:
         color="engine:N",
         height=400,
         x_title="Concurrency",
-        y_title="Aggregate decode throughput / tok/s",
+        y_title="Throughput / tok/s",
         tooltip=["engine:N", "concurrency:Q", "median_aggregate_tok_s:Q"],
         color_range=["#718B7A", "#78909A", "#B1815F"],
         zero=True,
@@ -211,7 +211,6 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
     if not c16.empty:
         c16 = c16.sort_values("median_aggregate_tok_s", ascending=False)
     top = c16.iloc[0] if not c16.empty else None
-    columns = st.columns(4)
     cards = [
         (
             "TOP C16 THROUGHPUT",
@@ -232,9 +231,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
             "manifest unavailable" if model.public_raw_runs is None else "aggregate evidence only",
         ),
     ]
-    for column, card in zip(columns, cards, strict=True):
-        with column:
-            render_metric_card(*card)
+    render_metric_grid(cards)
 
     st.markdown("### Aggregate decode throughput")
     if not concurrency_ok:

@@ -64,8 +64,8 @@ def _header_controls(live_path: Path) -> tuple[str, str, int | None]:
     brand, controls = st.columns([1.1, 2.9], vertical_alignment="bottom")
     with brand:
         st.markdown(
-            '<div class="ops-kicker" style="margin-bottom:.45rem">LOCAL INFERENCE / OPS</div>'
-            '<div style="font-weight:820;font-size:1.08rem">Operations Console</div>',
+            '<div style="font-weight:820;font-size:1.08rem;margin-bottom:.18rem">'
+            "Operations Console</div>",
             unsafe_allow_html=True,
         )
     with controls:

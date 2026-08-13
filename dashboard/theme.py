@@ -35,11 +35,11 @@ html { font-size: 17px; }
 .block-container { max-width: 1500px; padding: 1.25rem 2rem 2.5rem; }
 p, label, [data-testid="stMarkdownContainer"] { font-size: 17px; line-height: 1.55; }
 h1, h2, h3 { color: var(--ink); letter-spacing: -.035em; }
-h1 { font-size: clamp(2.15rem, 2.7vw, 2.65rem) !important; line-height: 1.08 !important; }
+h1 { font-size: clamp(2rem, 2.35vw, 2.25rem) !important; line-height: 1.1 !important; }
 h2 { font-size: clamp(1.45rem, 2vw, 2rem) !important; }
 h3 { font-size: 1.24rem !important; margin: 1.25rem 0 .45rem !important; }
 .ops-kicker { color: #60736A; font-size: .875rem; letter-spacing: .12em; font-weight: 800; }
-.ops-title { margin: .15rem 0 .25rem; font-size: clamp(2.15rem, 2.7vw, 2.65rem); line-height: 1.08; font-weight: 850; letter-spacing: -.035em; }
+.ops-title { margin: .08rem 0 .18rem; font-size: clamp(2rem, 2.35vw, 2.25rem); line-height: 1.1; font-weight: 850; letter-spacing: -.03em; }
 .ops-lede { max-width: 65rem; color: var(--ink-muted); font-size: 1rem; line-height:1.5; }
 .ops-rule { height: 1px; background: linear-gradient(90deg, #87998F, transparent); margin: .75rem 0 .7rem; }
 .source-line { display:flex; gap:.65rem; align-items:center; flex-wrap:wrap; margin:.1rem 0 .65rem; }
@@ -48,6 +48,7 @@ h3 { font-size: 1.24rem !important; margin: 1.25rem 0 .45rem !important; }
 .source-badge.live { background:#DCE7DE; color:#355044; }
 .source-badge.evidence { background:#DDE5E8; color:#405B65; }
 .source-note { color:var(--ink-muted); font-size:.875rem; }
+.metric-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:.65rem; margin:.1rem 0 .45rem; }
 .metric-card { min-height: 108px; padding: .82rem .95rem; border:1px solid var(--border); border-radius:14px; background:rgba(255,253,249,.92); box-shadow:0 7px 20px rgba(38,50,44,.04); }
 .metric-label { color:var(--ink-muted); font-size:.875rem; font-weight:800; letter-spacing:.075em; }
 .metric-value { margin:.28rem 0 .1rem; color:var(--ink); font-size:clamp(1.5rem,2vw,2rem); font-weight:820; line-height:1.1; font-variant-numeric:tabular-nums; }
@@ -76,7 +77,8 @@ div[role="radiogroup"] label:has(input:checked) { background:#DDE5DF; }
 @media (max-width: 760px) {
   html { font-size: 16px; }
   .block-container { padding: 1rem .9rem 2.25rem; }
-  .ops-title, h1 { font-size:clamp(1.85rem, 8vw, 2.05rem) !important; }
+  .ops-title, h1 { font-size:clamp(1.75rem, 7.4vw, 1.9rem) !important; }
+  .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.5rem; }
   .metric-card { min-height:100px; }
   .ops-lede { font-size:1rem; }
 }

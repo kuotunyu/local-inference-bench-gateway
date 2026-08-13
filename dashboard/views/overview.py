@@ -14,7 +14,7 @@ from dashboard.charts import style_chart
 from dashboard.components import (
     escape_html,
     format_metric,
-    render_metric_card,
+    render_metric_grid,
     render_page_heading,
     render_source_badge,
     render_state_message,
@@ -93,7 +93,7 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
         .mark_line(
             color="#B1815F",
             strokeWidth=3,
-            point=alt.OverlayMarkDef(size=76, filled=True, strokeWidth=1.5),
+            point=alt.OverlayMarkDef(color="#B1815F", size=76, filled=True, strokeWidth=1.5),
         )
         .encode(
             x=alt.X("timestamp:T", title=None, axis=alt.Axis(format="%H:%M", labelAngle=0)),
@@ -110,10 +110,7 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
         )
     )
     return style_chart(
-        alt.layer(requests, latency)
-        .resolve_scale(y="independent")
-        .properties(height=400)
-        .interactive(bind_y=False)
+        alt.layer(requests, latency).resolve_scale(y="independent").properties(height=400)
     )
 
 
@@ -164,7 +161,6 @@ def render_overview(
     render_source_badge(source_kind, source_note)
 
     metrics = model.metrics
-    columns = st.columns(5)
     cards = [
         (
             "REQUEST VOLUME",
@@ -188,9 +184,7 @@ def render_overview(
             format_metric(metrics.failover_rate_pct, "% of requests", digits=2),
         ),
     ]
-    for column, card in zip(columns, cards, strict=True):
-        with column:
-            render_metric_card(*card)
+    render_metric_grid(cards)
 
     st.markdown("### Request volume 與 P95 latency")
     if model.series.empty:

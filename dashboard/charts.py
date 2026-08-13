@@ -93,7 +93,6 @@ def line_chart(
         )
         .encode(**encodings)
         .properties(height=height)
-        .interactive(bind_y=False)
     )
     return style_chart(chart)
 

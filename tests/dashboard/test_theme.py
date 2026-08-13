@@ -14,7 +14,8 @@ def test_theme_contains_accessible_type_and_semantic_tokens() -> None:
     assert "font-size:.78rem" not in css
     assert "font-size:.8rem" not in css
     assert "font-size: 17px" in css
-    assert "2.65rem" in css
+    assert "2.25rem" in css
+    assert "2.65rem" not in css
     assert "3.55rem" not in css
 
 

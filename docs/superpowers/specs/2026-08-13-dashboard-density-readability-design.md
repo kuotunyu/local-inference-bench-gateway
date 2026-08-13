@@ -13,7 +13,7 @@ small paired charts with a denser operational hierarchy.
 
 ### Typography
 
-- Reduce the page title from the current 3.55 rem ceiling to a desktop range of 2.15–2.65 rem.
+- Reduce the page title from the current 3.55 rem ceiling to a desktop range of 2–2.25 rem.
 - Keep section headings visually distinct at 1.2–1.3 rem.
 - Raise primary body copy to 17 px with a 1.55 line height.
 - Keep supporting copy, captions, source notes, KPI labels, and chart labels at 14 px or larger.
@@ -54,7 +54,8 @@ small paired charts with a denser operational hierarchy.
 ## Responsive behavior
 
 - Desktop canvas stays capped near 1500 px and uses reduced outer padding.
-- At 760 px and below, controls, KPI cards, and chart groups stack without horizontal overflow.
+- At 760 px and below, controls and chart groups stack while KPI cards use a compact two-column
+  grid without horizontal overflow.
 - Mobile page titles use a 1.85–2.05 rem range; body copy remains 16 px minimum.
 - Charts retain at least 320 px height on narrow screens, with readable axis labels and tooltips.
 

@@ -7,6 +7,8 @@ import math
 
 import streamlit as st
 
+MetricCard = tuple[str, str, str]
+
 
 def escape_html(value: object) -> str:
     """Escape operator- or upstream-controlled values before HTML rendering."""
@@ -39,6 +41,22 @@ def render_metric_card(label: str, value: str, detail: str) -> None:
     )
 
 
+def metric_grid_html(cards: list[MetricCard]) -> str:
+    items = "".join(
+        '<div class="metric-card">'
+        f'<div class="metric-label">{escape_html(label)}</div>'
+        f'<div class="metric-value">{escape_html(value)}</div>'
+        f'<div class="metric-detail">{escape_html(detail)}</div>'
+        "</div>"
+        for label, value, detail in cards
+    )
+    return f'<div class="metric-grid">{items}</div>'
+
+
+def render_metric_grid(cards: list[MetricCard]) -> None:
+    st.markdown(metric_grid_html(cards), unsafe_allow_html=True)
+
+
 def render_state_message(title: str, copy: str, tone: str = "neutral") -> None:
     tone_class = "" if tone == "neutral" else f" {escape_html(tone)}"
     st.markdown(
@@ -48,10 +66,13 @@ def render_state_message(title: str, copy: str, tone: str = "neutral") -> None:
     )
 
 
-def render_page_heading(kicker: str, title: str, lede: str) -> None:
-    st.markdown(
-        f'<div class="ops-kicker">{escape_html(kicker)}</div>'
+def page_heading_html(kicker: str, title: str, lede: str) -> str:
+    del kicker
+    return (
         f'<div class="ops-title">{escape_html(title)}</div>'
-        f'<div class="ops-lede">{escape_html(lede)}</div><div class="ops-rule"></div>',
-        unsafe_allow_html=True,
+        f'<div class="ops-lede">{escape_html(lede)}</div><div class="ops-rule"></div>'
     )
+
+
+def render_page_heading(kicker: str, title: str, lede: str) -> None:
+    st.markdown(page_heading_html(kicker, title, lede), unsafe_allow_html=True)

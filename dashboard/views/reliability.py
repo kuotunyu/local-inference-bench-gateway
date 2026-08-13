@@ -87,27 +87,29 @@ def render_reliability(
     if source_kind == "demo":
         note += " · illustrative fixture"
     render_source_badge(source_kind, note)
-    render_state_message(
-        "Routing invariant",
-        "Health polling 只提供觀測；每次 request 仍會依 ordered backend chain 實際嘗試，不使用可能過期的 health flag 跳過 backend。",
+    st.caption(
+        "Routing invariant · Health polling 只提供觀測；每次 request 仍會依 ordered backend chain "
+        "實際嘗試，不使用可能過期的 health flag 跳過 backend。"
     )
 
     route_col, health_col = st.columns([1.25, 1], gap="large")
     with route_col:
         st.markdown("### Alias Routing")
-        for route in model.routes:
-            chain = escape_html("　→　".join(route["chain"]))
-            cap = route["max_concurrent"]
-            capacity = escape_html("unlimited" if cap is None else f"max_concurrent = {cap}")
-            models = escape_html(" → ".join(route["models"]))
-            st.markdown(
-                '<div class="status-card" style="margin-bottom:.7rem">'
-                f"<strong>{escape_html(route['alias'])}</strong>"
-                f'<div style="margin:.5rem 0;color:#40564B">{chain}</div>'
-                f"<small>Resolved model：{models}</small><br>"
-                f"<small>{capacity} · HTTP 429，不建立隱性 queue</small></div>",
-                unsafe_allow_html=True,
-            )
+        route_columns = st.columns(min(max(len(model.routes), 1), 2), gap="small")
+        for index, route in enumerate(model.routes):
+            with route_columns[index % len(route_columns)]:
+                chain = escape_html("　→　".join(route["chain"]))
+                cap = route["max_concurrent"]
+                capacity = escape_html("unlimited" if cap is None else f"max_concurrent = {cap}")
+                models = escape_html(" → ".join(route["models"]))
+                st.markdown(
+                    '<div class="status-card" style="margin-bottom:.55rem">'
+                    f"<strong>{escape_html(route['alias'])}</strong>"
+                    f'<div style="margin:.4rem 0;color:#40564B">{chain}</div>'
+                    f"<small>Resolved model：{models}</small><br>"
+                    f"<small>{capacity} · HTTP 429，不建立隱性 queue</small></div>",
+                    unsafe_allow_html=True,
+                )
     with health_col:
         st.markdown(f"### {model.health_heading}")
         if not status.reachable:

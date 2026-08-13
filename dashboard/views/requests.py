@@ -7,7 +7,7 @@ import streamlit as st
 
 from dashboard.components import (
     format_metric,
-    render_metric_card,
+    render_metric_grid,
     render_page_heading,
     render_source_badge,
     render_state_message,
@@ -114,18 +114,13 @@ def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
         return
     filtered = _filter_controls(snapshot.requests)
     summary = compute_overview(filtered, snapshot.failovers.iloc[0:0])
-    columns = st.columns(4)
     cards = [
         ("FILTERED REQUESTS", f"{summary.request_count:,}", "matching records"),
         ("SUCCESS RATE", format_metric(summary.success_rate_pct, "%"), "filtered scope"),
         ("P50 LATENCY", format_metric(summary.p50_latency_ms, " ms", digits=0), "total latency"),
         ("P95 LATENCY", format_metric(summary.p95_latency_ms, " ms", digits=0), "total latency"),
     ]
-    for column, card in zip(columns, cards, strict=True):
-        with column:
-            render_metric_card(*card)
-    columns = st.columns(3)
-    cards = [
+    cards += [
         ("P50 TTFT", format_metric(summary.p50_ttft_ms, " ms", digits=0), "when present"),
         ("P95 TTFT", format_metric(summary.p95_ttft_ms, " ms", digits=0), "streaming when present"),
         (
@@ -142,9 +137,7 @@ def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
             ),
         ),
     ]
-    for column, card in zip(columns, cards, strict=True):
-        with column:
-            render_metric_card(*card)
+    render_metric_grid(cards)
     if filtered.empty:
         render_state_message("沒有符合條件的 request", "篩選器已保留；放寬任一條件即可繼續探索。")
         return
@@ -163,5 +156,11 @@ def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
         "stream",
         "error_category",
     ]
-    st.dataframe(table[visible], hide_index=True, width="stretch", height=REQUEST_TABLE_HEIGHT)
+    st.dataframe(
+        table[visible],
+        hide_index=True,
+        width="stretch",
+        height=REQUEST_TABLE_HEIGHT,
+        row_height=36,
+    )
     st.caption("— 代表 upstream 未提供或該 request 不適用；並不代表 0 ms 或 0 tokens。")
