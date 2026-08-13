@@ -9,9 +9,9 @@ HERO_ASSET = REPO_ROOT / "docs" / "assets" / "operations-console-overview.png"
 README = REPO_ROOT / "README.md"
 PORTFOLIO_SECTION_ORDER = (
     "一眼看重點",
-    "System Context",
-    "Request 與 Failover lifecycle",
-    "Benchmark evidence pipeline",
+    "系統邊界（System Context）",
+    "Request 與 Failover 流程",
+    "Benchmark 證據鏈（Evidence Pipeline）",
     "量測結果與解讀邊界",
     "Operations Console",
     "Quickstart",
@@ -71,6 +71,7 @@ def test_readme_has_zh_tw_portfolio_information_architecture():
     text = _readme()
     assert _level_two_headings(text) == list(PORTFOLIO_SECTION_ORDER)
     assert _level_two_headings(text)[-1] == "License"
+    assert "一眼看重點 · System Context · Benchmark Evidence · Quickstart · 延伸文件" not in text
     assert "![Operations Console Demo Mode](docs/assets/operations-console-overview.png)" in text
 
 
@@ -79,55 +80,72 @@ def test_readme_diagrams_preserve_semantic_groups_and_rendering_contracts():
     assert len(blocks) == 3
     system_context, failover_lifecycle, evidence_pipeline = blocks
 
-    assert system_context.lstrip().startswith("flowchart LR")
-    for group in ("subgraph Repo", "subgraph External"):
+    assert "flowchart TB" in system_context
+    for group in (
+        'subgraph Entry["Entry points"]',
+        'subgraph Execution["Execution boundary"]',
+        'subgraph Evidence["Evidence & observability"]',
+        "direction LR",
+    ):
         assert group in system_context
     for edge in ("HTTP / SSE", "read-only SQLite", "aggregate evidence"):
         assert edge in system_context
     for semantic_group in (
         "OpenAI SDK / HTTP Client",
-        "FastAPI Gateway",
-        "SQLite Telemetry",
-        "llama.cpp / Ollama / LM Studio",
         "Async Benchmark Client",
+        "FastAPI Gateway",
+        "Alias Routing / Capacity / Failover",
+        "External Backend engines",
+        "SQLite Telemetry",
+        "Operations Console",
+        "llama.cpp / Ollama / LM Studio",
         "Aggregate Artifacts",
         "Digest + Claim Verifier",
+        "README / EVAL_REPORT / Operations Console",
     ):
         assert semantic_group in system_context
     _assert_high_contrast_class_defs(system_context, {"actor", "runtime", "data", "external"})
 
-    assert failover_lifecycle.lstrip().startswith("sequenceDiagram")
-    for participant in (
-        "Client",
-        "Gateway",
-        "Limiter",
-        "Primary",
-        "Fallback",
-        "Telemetry",
-    ):
+    assert "sequenceDiagram" in failover_lifecycle
+    for participant in ("Client", "Gateway", "Primary", "Fallback", "Telemetry"):
         assert f"participant {participant}" in failover_lifecycle
+    assert "participant Limiter" not in failover_lifecycle
     for lifecycle_boundary in (
         "HTTP 429 + Retry-After",
-        "return without Failover",
+        "success or 4xx: no Failover",
         "sanitized Failover event",
-        "Streaming SSE",
         "hold slot until stream end / failure / cancellation",
+        "metadata-only request telemetry",
         "release slot in finally",
     ):
         assert lifecycle_boundary in failover_lifecycle
 
-    assert evidence_pipeline.lstrip().startswith(("flowchart LR", "flowchart TD"))
+    assert "flowchart TB" in evidence_pipeline
+    for stage in (
+        'subgraph Inputs["1 · Inputs"]',
+        'subgraph Measurement["2 · Measurement"]',
+        'subgraph Boundary["3 · Publication boundary"]',
+        'subgraph Verification["4 · Verification"]',
+        'subgraph Presentation["5 · Presentation"]',
+    ):
+        assert stage in evidence_pipeline
     for semantic_group in (
-        "Synthetic calibrated prompts + workload matrix",
+        "Synthetic calibrated prompts / workload matrix",
         "random 8-character nonce",
-        "request-level raw runs (not public)",
-        "aggregate CSV + controlled JSON + derived charts",
+        "Async Benchmark Client",
+        "one measured engine resident on GPU",
+        "request-level raw runs",
+        "not public",
+        "aggregate CSV / controlled JSON / derived charts",
         "provenance.json",
-        "claims.json + release checks",
-        "README + EVAL_REPORT + Operations Console",
+        "claims.json",
+        "release checks",
+        "README",
+        "EVAL_REPORT",
+        "Operations Console",
     ):
         assert semantic_group in evidence_pipeline
-    assert "-. publication boundary .->" in evidence_pipeline
+    assert "-. not published .->" in evidence_pipeline
     _assert_high_contrast_class_defs(
         evidence_pipeline,
         {"input", "measurement", "artifact", "verification", "presentation", "unpublished"},

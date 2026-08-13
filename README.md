@@ -8,8 +8,6 @@
 
 這個 repository 將共同 Async Benchmark Client、OpenAI-compatible FastAPI Gateway 與 evidence-first Operations Console 組合成一個可審查系統。llama.cpp、Ollama 與 LM Studio 這些 Backend engines 都是另行安裝、啟動與管理的外部程序。
 
-[一眼看重點](#一眼看重點) · [System Context](#system-context) · [Benchmark Evidence](#benchmark-evidence-pipeline) · [Quickstart](#quickstart) · [延伸文件](#repository-map-與延伸文件)
-
 ![Operations Console Demo Mode](docs/assets/operations-console-overview.png)
 
 ## 一眼看重點
@@ -19,37 +17,47 @@
 - Operations Console 清楚區分 Demo、Live 與 Benchmark Evidence，不把示範資料包裝成實際流量，也不把 aggregate artifact 當成 request-level raw data。
 - CPU-only reviewer 不需 GPU、模型權重或推論引擎，即可檢視 UI、重算 canonical claims 並執行 release policy checks。
 
-## System Context
+## 系統邊界（System Context）
 
-Repository-owned 元件負責協定、路由、證據與可觀測性；真正載入模型的 Backend engines 位於 repository 邊界外。Gateway 與 Benchmark Client 可獨立審查，但共用同一組外部 OpenAI-compatible engines。
+這張圖將 request path、benchmark path 與 evidence / observability surface 放在同一個邊界視圖中，讓元件責任與資料流向可以分層閱讀。
 
 ```mermaid
-flowchart LR
-    Client["OpenAI SDK / HTTP Client"]
-
-    subgraph Repo["Repository-owned components"]
-        Gateway["FastAPI Gateway"]
-        Registry["Model Registry + Alias Routing"]
-        Capacity["Capacity Limiter + Failover"]
-        Telemetry[("SQLite Telemetry")]
-        Console["Operations Console"]
+%%{init: {"themeVariables": {"fontSize": "18px"}, "flowchart": {"nodeSpacing": 32, "rankSpacing": 44}}}%%
+flowchart TB
+    subgraph Entry["Entry points"]
+        direction LR
+        Client["OpenAI SDK / HTTP Client"]
         Bench["Async Benchmark Client"]
-        Aggregates["Aggregate Artifacts"]
-        Verifier["Digest + Claim Verifier"]
-        Surfaces["README / EVAL_REPORT / Operations Console"]
     end
 
-    subgraph External["External Backend engines"]
-        Engines["llama.cpp / Ollama / LM Studio"]
+    subgraph Execution["Execution boundary"]
+        direction LR
+        Gateway["FastAPI Gateway"]
+        Policy["Alias Routing / Capacity / Failover"]
+        Engines["External Backend engines<br/>llama.cpp / Ollama / LM Studio"]
     end
 
-    Client -->|"HTTP / SSE"| Gateway
-    Gateway --> Registry
-    Registry --> Capacity
-    Capacity --> Engines
+    subgraph Evidence["Evidence & observability"]
+        direction TB
+        subgraph RuntimeEvidence["Runtime telemetry"]
+            direction LR
+            Telemetry[("SQLite Telemetry")]
+            Console["Operations Console"]
+        end
+        subgraph PublishedEvidence["Published evidence"]
+            direction LR
+            Aggregates["Aggregate Artifacts"]
+            Verifier["Digest + Claim Verifier"]
+            Surfaces["README / EVAL_REPORT / Operations Console"]
+        end
+    end
+
+    Client --> Gateway
+    Gateway --> Policy
+    Policy -->|"HTTP / SSE"| Engines
+    Bench -->|"OpenAI-compatible HTTP"| Engines
     Gateway --> Telemetry
     Telemetry -->|"read-only SQLite"| Console
-    Bench --> Engines
     Engines -->|"aggregate evidence"| Aggregates
     Aggregates --> Verifier
     Verifier --> Surfaces
@@ -59,78 +67,106 @@ flowchart LR
     classDef data fill:#FEF3C7,stroke:#B45309,stroke-width:2px,color:#451A03;
     classDef external fill:#F3E8FF,stroke:#7E22CE,stroke-width:2px,color:#3B0764;
     class Client,Bench actor;
-    class Gateway,Registry,Capacity,Console,Verifier runtime;
+    class Gateway,Policy,Console,Verifier runtime;
     class Telemetry,Aggregates,Surfaces data;
     class Engines external;
 ```
 
-## Request 與 Failover lifecycle
+真正載入模型的 Backend engines 位於 repository 邊界外；Operations Console 只以 read-only 方式呈現 Telemetry 與已提交的 aggregate evidence，不是 Gateway control plane。
 
-Health poller 只提供觀測結果，不會成為 request-time routing oracle。每個 request 都依 Alias 的 ordered Backend chain 重新嘗試；4xx 通常代表共通的 request 問題，因此不觸發 Failover。
+## Request 與 Failover 流程
+
+每個 request 都依 Alias 的 ordered Backend chain 在當下重新嘗試；Health poller 只提供觀測結果，不會成為 request-time routing oracle。
 
 ```mermaid
+%%{init: {"themeVariables": {"fontSize": "17px"}, "sequence": {"actorFontSize": 17, "messageFontSize": 17, "noteFontSize": 16}}}%%
 sequenceDiagram
     participant Client
     participant Gateway
-    participant Limiter
     participant Primary
     participant Fallback
     participant Telemetry
 
     Client->>Gateway: POST /v1/chat/completions with Alias
-    Gateway->>Gateway: auth + envelope + Alias validation
-    Gateway->>Limiter: try_acquire
-    alt no capacity
-        Limiter-->>Gateway: rejected
+    Gateway->>Gateway: auth + Alias validation + try capacity slot
+    Note over Gateway: process-local capacity<br/>no unbounded in-memory queue
+    alt capacity exhausted
         Gateway-->>Client: HTTP 429 + Retry-After
     else slot acquired
-        Limiter-->>Gateway: acquired
         Gateway->>Gateway: resolve ordered Backend chain
         Gateway->>Primary: attempt
         alt primary success or 4xx
-            Primary-->>Gateway: response
-            Gateway-->>Client: return without Failover
-        else connection / timeout / protocol / non-final 5xx
-            Primary--xGateway: controlled failure category
+            Primary-->>Gateway: success or 4xx: no Failover
+        else retryable upstream failure
+            Primary--xGateway: connection / timeout / protocol / non-final 5xx
             Gateway->>Telemetry: sanitized Failover event
-            Gateway->>Fallback: fallback attempt
+            Gateway->>Fallback: attempt next Backend
             Fallback-->>Gateway: response
         end
+        Gateway-->>Client: JSON response / Streaming SSE
         opt Streaming SSE
-            Gateway-->>Client: Streaming SSE
-            Note over Gateway,Limiter: hold slot until stream end / failure / cancellation
+            Note over Client,Gateway: hold slot until stream end / failure / cancellation
         end
         Gateway->>Telemetry: metadata-only request telemetry
-        Gateway->>Limiter: release slot in finally
+        Gateway->>Gateway: release slot in finally
     end
 ```
 
 Streaming request 從上游連線開始到 stream 結束、失敗或取消之前都佔用 limiter slot。如果連線已開始後才發生讀取錯誤，Gateway 會終止 stream 並記錄受控類別，不會偽造 `[DONE]` 或中途切換 Backend。
 
-## Benchmark evidence pipeline
+## Benchmark 證據鏈（Evidence Pipeline）
 
-這條 pipeline 將可公開的 aggregate artifact 與未公開的 request-level raw runs 分開。每次 measured request 在 prompt 開頭加上 random nonce，避免 repeated prefix cache 改變 prefill 量測性質。
+這條證據鏈用五個 stage 分開 input、measurement、publication boundary、verification 與 presentation；每個 measured request 都先加入 random nonce，避免 repeated prefix cache 改變 prefill 量測性質。
 
 ```mermaid
-flowchart LR
-    Inputs["Synthetic calibrated prompts + workload matrix"]
-    Nonce["random 8-character nonce"]
-    Client["Async Benchmark Client: 3 warmups + 5 timed runs"]
-    Resident["one measured engine resident on GPU at a time"]
-    Raw["request-level raw runs (not public)"]
-    Aggregate["aggregate CSV + controlled JSON + derived charts"]
-    Provenance["provenance.json: versions, method, artifact class, SHA-256"]
-    Checks["claims.json + release checks"]
-    Presentation["README + EVAL_REPORT + Operations Console"]
+%%{init: {"themeVariables": {"fontSize": "18px"}, "flowchart": {"nodeSpacing": 32, "rankSpacing": 42}}}%%
+flowchart TB
+    subgraph Inputs["1 · Inputs"]
+        direction LR
+        Workload["Synthetic calibrated prompts / workload matrix"]
+        Nonce["random 8-character nonce"]
+        Workload --> Nonce
+    end
 
-    Inputs --> Nonce
+    subgraph Measurement["2 · Measurement"]
+        direction LR
+        Client["Async Benchmark Client<br/>3 warmups + 5 timed runs"]
+        Resident["one measured engine resident on GPU"]
+        Client --> Resident
+    end
+
+    subgraph Boundary["3 · Publication boundary"]
+        direction LR
+        Raw["request-level raw runs<br/>(not public)"]
+        Aggregate["aggregate CSV / controlled JSON / derived charts"]
+        Private["Outside the public repository"]
+        Raw -->|"aggregate only"| Aggregate
+        Raw -. not published .-> Private
+    end
+
+    subgraph Verification["4 · Verification"]
+        direction LR
+        Provenance["provenance.json<br/>versions · method · artifact class · SHA-256"]
+        Claims["claims.json<br/>canonical display claims"]
+        Checks["release checks"]
+        Provenance --> Checks
+        Claims --> Checks
+    end
+
+    subgraph Presentation["5 · Presentation"]
+        direction LR
+        Readme["README"]
+        Eval["EVAL_REPORT"]
+        Console["Operations Console"]
+    end
+
     Nonce --> Client
-    Client --> Resident
-    Resident -. publication boundary .-> Raw
-    Raw --> Aggregate
+    Resident --> Raw
     Aggregate --> Provenance
-    Provenance --> Checks
-    Checks --> Presentation
+    Aggregate --> Claims
+    Checks --> Readme
+    Checks --> Eval
+    Checks --> Console
 
     classDef input fill:#DBEAFE,stroke:#1D4ED8,stroke-width:2px,color:#172554;
     classDef measurement fill:#DCFCE7,stroke:#15803D,stroke-width:2px,color:#052E16;
@@ -138,12 +174,12 @@ flowchart LR
     classDef verification fill:#F3E8FF,stroke:#7E22CE,stroke-width:2px,color:#3B0764;
     classDef presentation fill:#FFE4E6,stroke:#BE123C,stroke-width:2px,color:#4C0519;
     classDef unpublished fill:#E5E7EB,stroke:#4B5563,stroke-width:2px,color:#111827;
-    class Inputs,Nonce input;
+    class Workload,Nonce input;
     class Client,Resident measurement;
-    class Raw unpublished;
+    class Raw,Private unpublished;
     class Aggregate,Provenance artifact;
-    class Checks verification;
-    class Presentation presentation;
+    class Claims,Checks verification;
+    class Readme,Eval,Console presentation;
 ```
 
 `bench/results/provenance.json` 記錄環境、方法、artifact class 與 SHA-256；`bench/results/claims.json` 再把每個 canonical display claim 綁定到可重算的 selector。Release checks 可驗證 aggregate integrity 與 claim 內容，但無法從未公開的原始 request 獨立重新彙總。
