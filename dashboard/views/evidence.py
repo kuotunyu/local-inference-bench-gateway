@@ -187,7 +187,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
     render_source_badge("evidence", f"已提交的 aggregate Artifact · {verified}")
     if evidence.warnings:
         render_state_message(
-            "Evidence 驗證警告",
+            "證據驗證警告",
             "、".join(f"{path}: {reason}" for path, reason in evidence.warnings.items()),
             "warning",
         )

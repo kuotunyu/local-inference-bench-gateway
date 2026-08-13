@@ -183,7 +183,7 @@ def _render_health(status: GatewayStatus) -> None:
     if not status.backends:
         render_state_message(
             "Gateway 可連線",
-            f"Backend Health 暫時無法取得（{status.reason}）；目前不推測 backend 狀態。",
+            f"Backend Health 暫時無法取得（{status.reason}）；目前不推測 Backend 狀態。",
         )
         return
     for url, health in status.backends.items():
@@ -249,7 +249,7 @@ def render_overview(
 
     st.markdown("### Request 數量與 P95 latency")
     if model.series.empty:
-        render_state_message("尚無趨勢資料", "第一筆 request 寫入後，這裡會顯示時間序列。")
+        render_state_message("尚無趨勢資料", "第一筆 Request 寫入後，這裡會顯示時間序列。")
     else:
         st.altair_chart(build_activity_chart(model.series), width="stretch")
         st.caption("Request 數量與 latency 使用獨立 Y 軸，以保留真實量級；hover 可讀取精確值。")

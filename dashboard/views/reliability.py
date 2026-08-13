@@ -88,7 +88,7 @@ def render_reliability(
         note += " · 示範 fixture"
     render_source_badge(source_kind, note)
     st.caption(
-        "Routing invariant · Health polling 僅供觀測；每個 Request 仍會依照 ordered Backend chain "
+        "Routing 原則 · Health polling 僅供觀測；每個 Request 仍會依照 ordered Backend chain "
         "實際嘗試，不會根據可能過期的 health flag 跳過 Backend。"
     )
 
@@ -116,7 +116,8 @@ def render_reliability(
             render_state_message("Gateway 離線", "無法取得目前 probe；不推算 uptime。", "warning")
         elif not status.backends:
             render_state_message(
-                "Health detail 無法使用", "Gateway 可連線，但 Backend detail 未授權或尚未回報。"
+                "Backend Health 詳細資訊無法取得",
+                "Gateway 可連線，但 Backend detail 未授權或尚未回報。",
             )
         else:
             health_rows = []
@@ -146,7 +147,7 @@ def render_reliability(
 
     st.markdown("### Failover event")
     if snapshot.failovers.empty:
-        render_state_message("沒有 failover event", "這只代表所選資料範圍未觀測到事件。")
+        render_state_message("沒有 Failover event", "這只代表所選資料範圍未觀測到事件。")
     else:
         table = snapshot.failovers.copy()
         table["next_backend"] = table["next_backend"].fillna("無 · chain 已耗盡")

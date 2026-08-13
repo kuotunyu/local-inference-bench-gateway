@@ -87,7 +87,13 @@ def test_console_views_render_neutral_scientific_titles(
         ),
         (
             "Routing 與可靠性",
-            ["SQLite Telemetry", "Error 分類", "觀測到的 HTTP 429", "Failover event"],
+            [
+                "SQLite Telemetry",
+                "Routing 原則",
+                "Error 分類",
+                "觀測到的 HTTP 429",
+                "Failover event",
+            ],
         ),
         ("Request 紀錄", ["篩選後 REQUEST", "成功率", "TOKEN 數量"]),
     ],
@@ -100,6 +106,7 @@ def test_operational_views_use_zh_tw_first_copy(
     app.radio[0].set_value(page).run(timeout=20)
 
     visible = "".join(item.value for item in app.markdown)
+    visible += "".join(item.value for item in app.caption)
     visible += "".join(item.label for item in app.metric)
     assert not app.exception
     assert all(fragment in visible for fragment in expected)

@@ -143,7 +143,7 @@ def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
     ]
     render_metric_grid(cards)
     if filtered.empty:
-        render_state_message("沒有符合條件的 request", "篩選器已保留；放寬任一條件即可繼續探索。")
+        render_state_message("沒有符合條件的 Request", "篩選器已保留；放寬任一條件即可繼續探索。")
         return
     table = build_request_table(filtered)
     visible = [
