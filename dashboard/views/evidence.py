@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import altair as alt
@@ -57,9 +58,45 @@ def _has_columns(frame: pd.DataFrame, columns: set[str]) -> bool:
     return not frame.empty and columns <= set(frame.columns)
 
 
+def _finite_numeric_values(frame: pd.DataFrame, column: str) -> list[float]:
+    if column not in frame:
+        return []
+    numeric = pd.to_numeric(frame[column], errors="coerce").dropna()
+    return sorted({value for value in numeric.tolist() if math.isfinite(float(value))})
+
+
+def _has_finite_numeric_values(frame: pd.DataFrame, column: str) -> bool:
+    return bool(_finite_numeric_values(frame, column))
+
+
+def _numeric_x_guide(frame: pd.DataFrame, column: str) -> tuple[alt.Scale, alt.Axis]:
+    values = _finite_numeric_values(frame, column)
+    if not values:
+        raise ValueError(f"{column} requires at least one numeric value")
+    span = values[-1] - values[0]
+    padding = max(span * 0.04, 0.5)
+    domain = [round(values[0] - padding, 10), round(values[-1] + padding, 10)]
+    return (
+        alt.Scale(domain=domain, nice=False),
+        alt.Axis(
+            values=values,
+            labelAngle=0,
+            tickSize=6,
+            tickWidth=1.25,
+            tickColor="#7B867F",
+            domainColor="#7B867F",
+        ),
+    )
+
+
+def _categorical_x_guide() -> tuple[alt.Scale, alt.Axis]:
+    return alt.Scale(paddingOuter=0.3), alt.Axis(labelAngle=0)
+
+
 def build_throughput_chart(concurrency: pd.DataFrame) -> alt.Chart:
     frame = concurrency.copy()
     frame["engine"] = frame["engine"].map(_engine_label)
+    x_scale, x_axis = _numeric_x_guide(frame, "concurrency")
     return line_chart(
         frame,
         x="concurrency:Q",
@@ -71,6 +108,8 @@ def build_throughput_chart(concurrency: pd.DataFrame) -> alt.Chart:
         tooltip=["engine:N", "concurrency:Q", "median_aggregate_tok_s:Q"],
         color_range=["#718B7A", "#78909A", "#B1815F"],
         zero=True,
+        x_scale=x_scale,
+        x_axis=x_axis,
     )
 
 
@@ -86,6 +125,7 @@ def build_ttft_chart(concurrency: pd.DataFrame) -> alt.Chart:
         value_name="ttft_ms",
     )
     long["series"] = long["engine"] + " · " + long["percentile"]
+    x_scale, x_axis = _numeric_x_guide(long, "concurrency")
     return line_chart(
         long,
         x="concurrency:Q",
@@ -97,6 +137,8 @@ def build_ttft_chart(concurrency: pd.DataFrame) -> alt.Chart:
         tooltip=["engine:N", "percentile:N", "concurrency:Q", "ttft_ms:Q"],
         color_range=["#718B7A", "#9FB2A5", "#78909A", "#A6BBC2", "#B1815F", "#D1AA8E"],
         zero=True,
+        x_scale=x_scale,
+        x_axis=x_axis,
     )
 
 
@@ -104,6 +146,7 @@ def build_prefill_chart(prefill: pd.DataFrame) -> alt.Chart:
     frame = prefill.copy()
     frame["engine"] = frame["engine"].map(_engine_label)
     frame["label"] = frame["engine"] + " · " + frame["prompt_target_tokens"].astype(str)
+    x_scale, x_axis = _categorical_x_guide()
     return bar_chart(
         frame,
         x="label:N",
@@ -114,6 +157,8 @@ def build_prefill_chart(prefill: pd.DataFrame) -> alt.Chart:
         y_title=None,
         tooltip=["engine:N", "prompt_target_tokens:Q", "median_ttft_s:Q"],
         color_range=["#718B7A", "#78909A", "#B1815F"],
+        x_scale=x_scale,
+        x_axis=x_axis,
     )
 
 
@@ -128,6 +173,7 @@ def build_gateway_cost_chart(overhead: dict) -> alt.Chart:
             "Median total": [direct.get("total_median_ms"), via.get("total_median_ms")],
         }
     ).melt(id_vars="path", var_name="metric", value_name="milliseconds")
+    x_scale, x_axis = _categorical_x_guide()
     return bar_chart(
         frame,
         x="path:N",
@@ -138,12 +184,15 @@ def build_gateway_cost_chart(overhead: dict) -> alt.Chart:
         y_title=None,
         tooltip=["path:N", "metric:N", "milliseconds:Q"],
         color_range=["#718B7A", "#B1815F", "#78909A"],
+        x_scale=x_scale,
+        x_axis=x_axis,
     )
 
 
 def build_vram_chart(c16: pd.DataFrame) -> alt.Chart:
     frame = c16.copy()
     frame["engine"] = frame["engine"].map(_engine_label)
+    x_scale, x_axis = _categorical_x_guide()
     return bar_chart(
         frame,
         x="engine:N",
@@ -154,11 +203,14 @@ def build_vram_chart(c16: pd.DataFrame) -> alt.Chart:
         y_title=None,
         tooltip=["engine:N", "median_vram_baseline_mb:Q"],
         color_range=["#718B7A", "#78909A", "#B1815F"],
+        x_scale=x_scale,
+        x_axis=x_axis,
     )
 
 
 def build_kv_chart(control: pd.DataFrame) -> alt.Chart:
     long = control.melt(id_vars="concurrency", var_name="setting", value_name="ttft_ms")
+    x_scale, x_axis = _numeric_x_guide(long, "concurrency")
     return line_chart(
         long,
         x="concurrency:Q",
@@ -170,6 +222,8 @@ def build_kv_chart(control: pd.DataFrame) -> alt.Chart:
         tooltip=["setting:N", "concurrency:Q", "ttft_ms:Q"],
         color_range=["#718B7A", "#B1815F"],
         zero=True,
+        x_scale=x_scale,
+        x_axis=x_axis,
     )
 
 
@@ -210,7 +264,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
             "p95_ttft_s",
             "median_vram_baseline_mb",
         },
-    )
+    ) and _has_finite_numeric_values(evidence.concurrency, "concurrency")
     c16 = (
         evidence.concurrency[evidence.concurrency["concurrency"].eq(16)].copy()
         if concurrency_ok
@@ -305,12 +359,19 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
                 control = off[["concurrency", "Unified KV Cache OFF"]].merge(
                     on[["concurrency", "Unified KV Cache ON"]], on="concurrency"
                 )
-                control[["Unified KV Cache OFF", "Unified KV Cache ON"]] *= 1000
-                _render_measure_key("line", "P50 TTFT／ms")
-                st.altair_chart(build_kv_chart(control), width="stretch")
-                st.caption(
-                    "P50 TTFT / ms · paired controlled observation。ON 在部分 concurrency 出現高延遲；內部分配或 scheduling 的解釋仍屬 hypothesis。"
-                )
+                if _has_finite_numeric_values(control, "concurrency"):
+                    control[["Unified KV Cache OFF", "Unified KV Cache ON"]] *= 1000
+                    _render_measure_key("line", "P50 TTFT／ms")
+                    st.altair_chart(build_kv_chart(control), width="stretch")
+                    st.caption(
+                        "P50 TTFT / ms · paired controlled observation。ON 在部分 concurrency 出現高延遲；內部分配或 scheduling 的解釋仍屬 hypothesis。"
+                    )
+                else:
+                    render_state_message(
+                        "Controlled scan 無法使用",
+                        "Unified KV Cache paired Artifact 沒有共同的有效 concurrency。",
+                        "warning",
+                    )
             else:
                 render_state_message(
                     "Controlled scan 無法使用",

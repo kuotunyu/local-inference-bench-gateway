@@ -1,9 +1,11 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
 
 from dashboard.data.benchmark_repository import load_benchmark_evidence
 from dashboard.views.evidence import (
+    _has_finite_numeric_values,
     build_evidence_view_model,
     build_gateway_cost_chart,
     build_kv_chart,
@@ -43,6 +45,20 @@ def test_primary_evidence_charts_use_expanded_readable_canvases() -> None:
 
     assert throughput["height"] == 400
     assert throughput["encoding"]["x"]["title"] == "Concurrency"
+    assert throughput["encoding"]["x"]["scale"] == {
+        "domain": [0.4, 16.6],
+        "nice": False,
+    }
+    assert throughput["encoding"]["x"]["axis"]["values"] == [1, 4, 8, 16]
+    assert throughput["encoding"]["x"]["axis"]["labelAngle"] == 0
+    assert ttft["encoding"]["x"]["scale"] == throughput["encoding"]["x"]["scale"]
+    assert ttft["encoding"]["x"]["axis"] == throughput["encoding"]["x"]["axis"]
+    assert kv["encoding"]["x"]["scale"] == {
+        "domain": [0.5, 4.5],
+        "nice": False,
+    }
+    assert kv["encoding"]["x"]["axis"]["values"] == [1, 4]
+    assert kv["encoding"]["x"]["axis"]["labelAngle"] == 0
     assert ttft["height"] == 400
     assert prefill["height"] >= 340
     assert gateway["height"] >= 340
@@ -70,6 +86,8 @@ def test_primary_evidence_charts_use_expanded_readable_canvases() -> None:
         assert chart["mark"]["type"] == "bar"
         assert chart["mark"]["cornerRadiusEnd"] == 5
         assert chart["encoding"]["color"]["legend"]["orient"] == "bottom"
+        assert chart["encoding"]["x"]["scale"]["paddingOuter"] == 0.3
+        assert chart["encoding"]["x"]["axis"]["labelAngle"] == 0
     assert [item["field"] for item in throughput["encoding"]["tooltip"]] == [
         "engine",
         "concurrency",
@@ -113,3 +131,39 @@ def test_missing_evidence_artifacts_degrade_without_exception(tmp_path: Path) ->
     assert evidence.provenance == {}
     assert model.public_raw_runs is None
     assert model.measurement_date == "—"
+
+
+def test_numeric_axis_ignores_non_finite_concurrency_values() -> None:
+    frame = pd.DataFrame(
+        {
+            "engine": ["ollama", "ollama", "ollama", "ollama"],
+            "concurrency": [1, float("inf"), float("-inf"), 4],
+            "median_aggregate_tok_s": [100, 200, 300, 400],
+        }
+    )
+
+    x_encoding = build_throughput_chart(frame).to_dict()["encoding"]["x"]
+
+    assert x_encoding["axis"]["values"] == [1, 4]
+    assert x_encoding["scale"]["domain"] == [0.5, 4.5]
+
+
+def test_invalid_concurrency_artifact_degrades_without_exception() -> None:
+    evidence = load_benchmark_evidence(Path("bench/results"))
+    invalid = evidence.concurrency.copy()
+    invalid["concurrency"] = [float("inf")] * len(invalid)
+
+    assert not _has_finite_numeric_values(invalid, "concurrency")
+    render_evidence(replace(evidence, concurrency=invalid))
+
+
+def test_kv_control_without_shared_concurrency_degrades_without_exception() -> None:
+    evidence = load_benchmark_evidence(Path("bench/results"))
+
+    render_evidence(
+        replace(
+            evidence,
+            kv_cache_off=[{"concurrency": 1, "ttft_p50_s": 0.1}],
+            kv_cache_on=[{"concurrency": 4, "ttft_p50_s": 0.2}],
+        )
+    )

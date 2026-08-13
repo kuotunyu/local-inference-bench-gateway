@@ -70,10 +70,17 @@ def line_chart(
     tooltip: Sequence[str] | None = None,
     color_range: Sequence[str] | None = None,
     zero: bool = False,
+    x_scale: alt.Scale | None = None,
+    x_axis: alt.Axis | None = None,
 ) -> alt.Chart:
     """Build a legible multi-series line chart with visible data points."""
     encodings: dict[str, object] = {
-        "x": alt.X(x, title=x_title),
+        "x": alt.X(
+            x,
+            title=x_title,
+            scale=x_scale if x_scale is not None else alt.Undefined,
+            axis=x_axis if x_axis is not None else alt.Undefined,
+        ),
         "y": alt.Y(y, title=y_title, scale=alt.Scale(zero=zero)),
     }
     if color is not None:
@@ -108,10 +115,17 @@ def bar_chart(
     y_title: str | None = None,
     tooltip: Sequence[str] | None = None,
     color_range: Sequence[str] | None = None,
+    x_scale: alt.Scale | None = None,
+    x_axis: alt.Axis | None = None,
 ) -> alt.Chart:
     """Build a legible bar chart for vertical or horizontal categorical data."""
     encodings: dict[str, object] = {
-        "x": alt.X(x, title=x_title),
+        "x": alt.X(
+            x,
+            title=x_title,
+            scale=x_scale if x_scale is not None else alt.Undefined,
+            axis=x_axis if x_axis is not None else alt.Undefined,
+        ),
         "y": alt.Y(y, title=y_title),
     }
     if color is not None:

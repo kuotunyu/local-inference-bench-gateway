@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from dashboard.charts import chart_theme, line_chart
+from dashboard.charts import bar_chart, chart_theme, line_chart
 
 
 def test_chart_theme_has_readable_axes_and_legend() -> None:
@@ -36,3 +36,15 @@ def test_line_chart_uses_visible_marks_and_requested_height() -> None:
     assert spec["mark"]["strokeWidth"] >= 2.5
     assert spec["mark"]["point"]["size"] >= 60
     assert spec["config"]["axis"]["labelFontSize"] >= 15
+
+
+def test_chart_helpers_preserve_default_x_axis_when_no_override_is_requested() -> None:
+    frame = pd.DataFrame({"category": ["A", "B"], "value": [12, 18]})
+
+    line_x = line_chart(frame, x="value:Q", y="value:Q").to_dict()["encoding"]["x"]
+    bar_x = bar_chart(frame, x="category:N", y="value:Q").to_dict()["encoding"]["x"]
+
+    assert "axis" not in line_x
+    assert "scale" not in line_x
+    assert "axis" not in bar_x
+    assert "scale" not in bar_x
