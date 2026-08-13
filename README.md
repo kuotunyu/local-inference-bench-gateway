@@ -33,8 +33,8 @@ flowchart TB
 
     subgraph Execution["Execution boundary"]
         direction LR
-        Gateway["FastAPI Gateway<br/>Alias Routing / Capacity / Failover"]
-        Engines["External Backend engines<br/>llama.cpp / Ollama / LM Studio"]
+        Gateway["FastAPI Gateway · Alias Routing / Capacity / Failover"]
+        Engines["External Backend engines · llama.cpp / Ollama / LM Studio"]
     end
 
     subgraph Observability["Runtime observability"]
@@ -100,7 +100,7 @@ sequenceDiagram
             Fallback-->>Gateway: response
         end
         Gateway-->>Client: JSON response / Streaming SSE
-        Note over Gateway,Primary: Streaming holds slot until stream end /<br/>failure / cancellation
+        Note over Gateway,Primary: Streaming: slot held until end / failure / cancel
         Gateway->>Telemetry: metadata-only request telemetry
         Gateway->>Gateway: release slot in finally
     end
@@ -124,14 +124,14 @@ flowchart TB
 
     subgraph Measurement["2 · Measurement"]
         direction LR
-        Client["Async Benchmark Client<br/>3 warmups + 5 timed runs"]
+        Client["Async Benchmark Client · 3 warmups + 5 timed runs"]
         Resident["one measured engine resident on GPU"]
         Client --> Resident
     end
 
     subgraph Boundary["3 · Publication boundary"]
         direction LR
-        Raw["request-level raw runs<br/>(not public)"]
+        Raw["request-level raw runs · not public"]
         Aggregate["aggregate CSV / controlled JSON / derived charts"]
         Private["Outside the public repository"]
         Raw -->|"aggregate only"| Aggregate
@@ -140,8 +140,8 @@ flowchart TB
 
     subgraph Verification["4 · Verification"]
         direction LR
-        Provenance["provenance.json<br/>versions · method · artifact class · SHA-256"]
-        Claims["claims.json<br/>canonical display claims"]
+        Provenance["provenance.json · versions · method · artifact class · SHA-256"]
+        Claims["claims.json · canonical display claims"]
         Checks["release checks"]
         Provenance --> Checks
         Claims --> Checks

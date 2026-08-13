@@ -115,8 +115,7 @@ def test_readme_diagrams_preserve_semantic_groups_and_rendering_contracts():
         "HTTP 429 + Retry-After",
         "success or 4xx: no Failover",
         "sanitized Failover event",
-        "holds slot until stream end",
-        "failure / cancellation",
+        "slot held until end / failure / cancel",
         "metadata-only request telemetry",
         "release slot in finally",
     ):
