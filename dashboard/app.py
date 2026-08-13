@@ -32,7 +32,7 @@ from dashboard.views.reliability import render_reliability  # noqa: E402
 from dashboard.views.requests import render_requests  # noqa: E402
 from gateway.registry import Registry, RegistryConfigError, load_registry  # noqa: E402
 
-PAGES = ["Overview", "Routing & Reliability", "Requests", "Benchmark Evidence"]
+PAGES = ["系統總覽", "Routing 與可靠性", "Request 紀錄", "Benchmark 證據"]
 WINDOWS = {"15 分鐘": 15, "60 分鐘": 60, "6 小時": 360, "24 小時": 1440, "全部資料": None}
 
 
@@ -69,20 +69,20 @@ def _header_controls(live_path: Path) -> tuple[str, str, int | None]:
     default = select_default_mode(live_path)
     with source_col:
         mode_label = st.selectbox(
-            "Telemetry source",
-            ["Demo Mode", "Live Mode"],
+            "Telemetry 資料源",
+            ["Demo 模式", "Live 模式"],
             index=1 if default == "live" else 0,
             key="telemetry_source",
         )
     with window_col:
         window_label = st.selectbox(
-            "Observation window", list(WINDOWS), index=1, key="observation_window"
+            "觀測時間範圍", list(WINDOWS), index=1, key="observation_window"
         )
     with refresh_col:
-        st.button("重新整理", width="stretch", help="重新讀取 telemetry 與 current health")
+        st.button("重新整理", width="stretch", help="重新讀取 Telemetry 與目前的 Backend Health")
     st.markdown('<div class="ops-rule" style="margin:.55rem 0"></div>', unsafe_allow_html=True)
-    page = st.radio("View", PAGES, horizontal=True, label_visibility="collapsed")
-    return ("live" if mode_label == "Live Mode" else "demo"), page, WINDOWS[window_label]
+    page = st.radio("頁面", PAGES, horizontal=True, label_visibility="collapsed")
+    return ("live" if mode_label == "Live 模式" else "demo"), page, WINDOWS[window_label]
 
 
 def main() -> None:
@@ -105,14 +105,14 @@ def main() -> None:
         telemetry = AppTelemetryState(
             st.session_state["last_live_snapshot"],
             "live",
-            f"Live telemetry 暫時無法重新讀取；顯示 last-good stale snapshot（{stale_at}）。",
+            f"Live Telemetry 暫時無法重新讀取；目前顯示上次成功取得的 snapshot（{stale_at}）。",
         )
     snapshot = slice_observation_window(telemetry.snapshot, minutes, telemetry.source_kind)
     if telemetry.notice:
         render_state_message("已切換至安全資料源", telemetry.notice, "warning")
     if mode == "live" and isinstance(st.session_state.get("last_live_refresh"), datetime):
         refreshed = st.session_state["last_live_refresh"].astimezone().strftime("%Y/%m/%d %H:%M:%S")
-        st.caption(f"Last successful Live refresh · {refreshed}")
+        st.caption(f"上次成功重新整理 Live 資料 · {refreshed}")
 
     registry_notice = None
     try:
@@ -121,9 +121,9 @@ def main() -> None:
         )
     except (OSError, RegistryConfigError) as exc:
         registry = Registry({})
-        registry_notice = f"models.yaml 無法讀取：{exc}。Telemetry 與 Benchmark Evidence 仍可使用。"
-    if registry_notice and page in {"Overview", "Routing & Reliability"}:
-        render_state_message("Registry unavailable", registry_notice, "warning")
+        registry_notice = f"models.yaml 無法讀取：{exc}。Telemetry 與 Benchmark 證據仍可使用。"
+    if registry_notice and page in {"系統總覽", "Routing 與可靠性"}:
+        render_state_message("Registry 無法使用", registry_notice, "warning")
 
     if telemetry.source_kind == "demo":
         status = _demo_status()
@@ -133,7 +133,7 @@ def main() -> None:
             os.environ.get("GATEWAY_API_KEY") or None,
         )
 
-    if page == "Overview":
+    if page == "系統總覽":
         render_overview(
             snapshot,
             telemetry.source_kind,
@@ -141,17 +141,15 @@ def main() -> None:
             registry,
             observation_window_minutes=minutes,
         )
-    elif page == "Routing & Reliability":
+    elif page == "Routing 與可靠性":
         render_reliability(snapshot, telemetry.source_kind, status, registry)
-    elif page == "Requests":
+    elif page == "Request 紀錄":
         render_requests(snapshot, telemetry.source_kind)
     else:
         render_evidence(load_benchmark_evidence(PROJECT_ROOT / "bench/results"))
 
     st.markdown('<div class="ops-rule" style="margin-top:2.4rem"></div>', unsafe_allow_html=True)
-    st.caption(
-        "Single-workstation reference system · SQLite telemetry · aggregate benchmark evidence · loopback only"
-    )
+    st.caption("單機參考系統 · SQLite Telemetry · aggregate Benchmark 證據 · 僅限 loopback")
 
 
 if __name__ == "__main__":

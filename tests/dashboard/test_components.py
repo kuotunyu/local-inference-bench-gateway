@@ -8,7 +8,7 @@ def test_brand_block_fills_the_header_with_product_context() -> None:
     assert 'class="brand-title"' in markup
     assert 'class="brand-subtitle"' in markup
     assert "Operations Console" in markup
-    assert "Local inference gateway" in markup
+    assert "本機推論 Gateway" in markup
 
 
 def test_page_heading_uses_a_two_column_scientific_structure() -> None:
@@ -23,12 +23,14 @@ def test_page_heading_uses_a_two_column_scientific_structure() -> None:
 
 
 def test_metric_grid_is_compact_and_escapes_values() -> None:
-    markup = metric_grid_html([("REQUESTS", "<60>", "selected window")])
+    markup = metric_grid_html([("REQUEST 數量", "<60>", "所選時間範圍")])
 
     assert 'class="metric-grid metric-count-1"' in markup
     assert "&lt;60&gt;" in markup
     assert "<60>" not in markup
     assert 'class="metric-label"' in markup
+    assert "REQUEST 數量" in markup
+    assert "所選時間範圍" in markup
     assert 'class="metric-detail"' in markup
     assert 'class="metric-value"' in markup
 

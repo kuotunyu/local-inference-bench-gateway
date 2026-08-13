@@ -36,10 +36,10 @@ def load_telemetry_state(
             return AppTelemetryState(
                 snapshot,
                 "demo",
-                "Live Mode 暫時無法使用，已安全切換 Demo Mode。"
+                "Live 模式暫時無法使用，已安全切換至 Demo 模式。"
                 f"{exc}。請先執行 `uv run uvicorn gateway.app:app --host 127.0.0.1 --port 9000`，"
-                "並確認 `GATEWAY_DB_PATH` 指向 gateway 寫入的 SQLite；"
-                "修正後再切回 Live Mode，不需刪除或重建現有資料庫。",
+                "並確認 `GATEWAY_DB_PATH` 指向 Gateway 寫入的 SQLite；"
+                "修正後再切回 Live 模式，不需刪除或重建現有資料庫。",
             )
     return AppTelemetryState(load_snapshot(ensure_demo_database(demo_directory)), "demo")
 

@@ -20,7 +20,7 @@ def brand_block_html() -> str:
     return (
         '<div class="brand-block">'
         '<div class="brand-title">Operations Console</div>'
-        '<div class="brand-subtitle">Local inference gateway</div>'
+        '<div class="brand-subtitle">本機推論 Gateway</div>'
         "</div>"
     )
 
