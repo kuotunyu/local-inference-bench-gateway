@@ -84,7 +84,8 @@ def test_readme_diagrams_preserve_semantic_groups_and_rendering_contracts():
     for group in (
         'subgraph Entry["Entry points"]',
         'subgraph Execution["Execution boundary"]',
-        'subgraph Evidence["Evidence & observability"]',
+        'subgraph Observability["Runtime observability"]',
+        'subgraph Evidence["Published evidence"]',
         "direction LR",
     ):
         assert group in system_context
@@ -114,7 +115,8 @@ def test_readme_diagrams_preserve_semantic_groups_and_rendering_contracts():
         "HTTP 429 + Retry-After",
         "success or 4xx: no Failover",
         "sanitized Failover event",
-        "hold slot until stream end / failure / cancellation",
+        "holds slot until stream end",
+        "failure / cancellation",
         "metadata-only request telemetry",
         "release slot in finally",
     ):

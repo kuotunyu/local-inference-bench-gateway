@@ -28,46 +28,44 @@ flowchart TB
         direction LR
         Client["OpenAI SDK / HTTP Client"]
         Bench["Async Benchmark Client"]
+        Client ~~~ Bench
     end
 
     subgraph Execution["Execution boundary"]
         direction LR
-        Gateway["FastAPI Gateway"]
-        Policy["Alias Routing / Capacity / Failover"]
+        Gateway["FastAPI Gateway<br/>Alias Routing / Capacity / Failover"]
         Engines["External Backend engines<br/>llama.cpp / Ollama / LM Studio"]
     end
 
-    subgraph Evidence["Evidence & observability"]
-        direction TB
-        subgraph RuntimeEvidence["Runtime telemetry"]
-            direction LR
-            Telemetry[("SQLite Telemetry")]
-            Console["Operations Console"]
-        end
-        subgraph PublishedEvidence["Published evidence"]
-            direction LR
-            Aggregates["Aggregate Artifacts"]
-            Verifier["Digest + Claim Verifier"]
-            Surfaces["README / EVAL_REPORT / Operations Console"]
-        end
+    subgraph Observability["Runtime observability"]
+        direction LR
+        Telemetry[("SQLite Telemetry")]
+        Console["Operations Console"]
+    end
+
+    subgraph Evidence["Published evidence"]
+        direction LR
+        Aggregates["Aggregate Artifacts"]
+        Verifier["Digest + Claim Verifier"]
+        Surfaces["README / EVAL_REPORT / Operations Console"]
     end
 
     Client --> Gateway
-    Gateway --> Policy
-    Policy -->|"HTTP / SSE"| Engines
+    Gateway -->|"HTTP / SSE"| Engines
     Bench -->|"OpenAI-compatible HTTP"| Engines
     Gateway --> Telemetry
     Telemetry -->|"read-only SQLite"| Console
     Engines -->|"aggregate evidence"| Aggregates
     Aggregates --> Verifier
     Verifier --> Surfaces
+    Console ~~~ Aggregates
 
     classDef actor fill:#DBEAFE,stroke:#1D4ED8,stroke-width:2px,color:#172554;
     classDef runtime fill:#DCFCE7,stroke:#15803D,stroke-width:2px,color:#052E16;
     classDef data fill:#FEF3C7,stroke:#B45309,stroke-width:2px,color:#451A03;
     classDef external fill:#F3E8FF,stroke:#7E22CE,stroke-width:2px,color:#3B0764;
     class Client,Bench actor;
-    class Gateway,Policy,Console,Verifier runtime;
+    class Gateway,Console,Verifier runtime;
     class Telemetry,Aggregates,Surfaces data;
     class Engines external;
 ```
@@ -79,7 +77,7 @@ flowchart TB
 每個 request 都依 Alias 的 ordered Backend chain 在當下重新嘗試；Health poller 只提供觀測結果，不會成為 request-time routing oracle。
 
 ```mermaid
-%%{init: {"themeVariables": {"fontSize": "17px"}, "sequence": {"actorFontSize": 17, "messageFontSize": 17, "noteFontSize": 16}}}%%
+%%{init: {"themeVariables": {"fontSize": "17px"}, "sequence": {"actorFontSize": 17, "messageFontSize": 17, "noteFontSize": 16, "messageMargin": 20, "noteMargin": 8, "mirrorActors": false}}}%%
 sequenceDiagram
     participant Client
     participant Gateway
@@ -89,12 +87,10 @@ sequenceDiagram
 
     Client->>Gateway: POST /v1/chat/completions with Alias
     Gateway->>Gateway: auth + Alias validation + try capacity slot
-    Note over Gateway: process-local capacity<br/>no unbounded in-memory queue
-    alt capacity exhausted
+    alt capacity exhausted · no queue
         Gateway-->>Client: HTTP 429 + Retry-After
     else slot acquired
-        Gateway->>Gateway: resolve ordered Backend chain
-        Gateway->>Primary: attempt
+        Gateway->>Primary: resolve Alias → ordered first attempt
         alt primary success or 4xx
             Primary-->>Gateway: success or 4xx: no Failover
         else retryable upstream failure
@@ -104,9 +100,7 @@ sequenceDiagram
             Fallback-->>Gateway: response
         end
         Gateway-->>Client: JSON response / Streaming SSE
-        opt Streaming SSE
-            Note over Client,Gateway: hold slot until stream end / failure / cancellation
-        end
+        Note over Gateway,Primary: Streaming holds slot until stream end /<br/>failure / cancellation
         Gateway->>Telemetry: metadata-only request telemetry
         Gateway->>Gateway: release slot in finally
     end
@@ -158,6 +152,7 @@ flowchart TB
         Readme["README"]
         Eval["EVAL_REPORT"]
         Console["Operations Console"]
+        Readme ~~~ Eval ~~~ Console
     end
 
     Nonce --> Client
