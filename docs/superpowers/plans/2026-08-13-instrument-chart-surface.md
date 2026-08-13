@@ -13,7 +13,7 @@
 - Preserve 10-minute aggregation buckets and all telemetry values.
 - Add five minutes of temporal domain padding before and after the data.
 - Select X-axis intervals from `10 min`, `30 min`, `1 h`, `2 h`, `4 h`, `6 h`, `12 h`, `1 d`, `2 d`, `7 d`, targeting approximately seven ticks.
-- Use 46 px bars at 0.90 opacity with `#5F7F6B`; use a 4 px P95 line with `#B56F45`, 96 px points, and a 2 px point stroke.
+- Use bars up to 46 px at 0.90 opacity with `#5F7F6B`; scale below that limit on narrow canvases so bars remain distinct. Use a 4 px P95 line with `#B56F45`, 96 px points, and a 2 px point stroke.
 - Preserve independent Y scales, the 400 px chart height, tooltips, observation-window behavior, and all data semantics.
 - Keep boundaries only for inputs, buttons, data frames, expanders, source badges, and semantic state callouts.
 - Preserve desktop and 390 px mobile layouts without horizontal overflow.
@@ -317,7 +317,7 @@ checks pass.
 Run:
 
 ```powershell
-node C:\Users\3Hml\.codex\skills\impeccable\scripts\detect.mjs --json dashboard/theme.py dashboard/views/overview.py
+node <impeccable-skill-root>/scripts/detect.mjs --json dashboard/theme.py dashboard/views/overview.py
 ```
 
 Expected: no unexplained findings.
@@ -353,3 +353,18 @@ git status --short
 ```
 
 Expected: commit succeeds and the worktree is clean.
+
+## Execution Notes
+
+- Implemented the deterministic five-minute domain padding and adaptive clock-aligned ticks. The
+  60-minute fixture renders seven ten-minute labels from `00:40` through `01:40`.
+- Desktop rendering keeps 46 px bars. The first 390 px inspection showed fixed-width bars merging,
+  so the single permitted correction changed the mark size to `min(46, width / 9)`. The confirmation
+  pass retained visible separation, readable alternating labels, and no horizontal overflow.
+- Flattened KPI metrics into one instrument rail, status cards into divided rows, and navigation into
+  a borderless selected-state treatment. Controls, callouts, tables, and expanders retain boundaries.
+- Automated verification passed: 66 dashboard tests, 154 full tests, Ruff lint and format checks,
+  publication/evidence/document/docker release checks, and the Impeccable detector.
+- Desktop and 390 px passes covered all four views without horizontal overflow or rendered Streamlit
+  exceptions. Vega emitted the pre-existing `Infinite extent` warnings for intentionally unavailable
+  benchmark dimensions; no new console error was introduced by this change.
