@@ -45,6 +45,9 @@ def test_overview_activity_chart_uses_full_operational_canvas(tmp_path: Path) ->
     assert bar["encoding"]["x"]["scale"] == line["encoding"]["x"]["scale"]
     assert bar["encoding"]["x"]["axis"]["tickSize"] == 6
     assert bar["encoding"]["x"]["axis"]["labelOverlap"] == "greedy"
+    assert bar["encoding"]["y"]["title"] == "每 bucket Request 數"
+    assert bar["encoding"]["tooltip"][1]["title"] == "Request 數"
+    assert line["encoding"]["y"]["title"] == "P95 latency / ms"
 
 
 def test_activity_time_guide_pads_half_a_bucket_and_uses_ten_minute_ticks() -> None:
@@ -120,6 +123,9 @@ def test_error_chart_is_horizontal_and_readable(tmp_path: Path) -> None:
 
     assert spec["height"] == 360
     assert spec["encoding"]["y"]["field"] == "error_category"
+    assert spec["encoding"]["x"]["title"] == "觀測到的 failure"
+    assert spec["encoding"]["tooltip"][0]["title"] == "分類"
+    assert spec["encoding"]["tooltip"][1]["title"] == "數量"
     assert spec["config"]["axis"]["labelFontSize"] >= 14
 
 

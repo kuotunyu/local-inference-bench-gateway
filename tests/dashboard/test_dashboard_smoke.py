@@ -69,3 +69,27 @@ def test_console_views_render_neutral_scientific_titles(
 
     assert not app.exception
     assert any(title in item.value for item in app.markdown)
+
+
+@pytest.mark.parametrize(
+    ("page", "expected"),
+    [
+        ("系統總覽", ["REQUEST 數量", "成功率", "FAILOVER 次數", "近期 Failover"]),
+        (
+            "Routing 與可靠性",
+            ["Error 分類", "觀測到的 HTTP 429", "Failover event"],
+        ),
+        ("Request 紀錄", ["篩選後 REQUEST", "成功率", "TOKEN 數量"]),
+    ],
+)
+def test_operational_views_use_zh_tw_first_copy(
+    page: str, expected: list[str], tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("GATEWAY_DB_PATH", str(tmp_path / "missing-live.db"))
+    app = AppTest.from_file(str(APP_PATH)).run(timeout=20)
+    app.radio[0].set_value(page).run(timeout=20)
+
+    visible = "".join(item.value for item in app.markdown)
+    visible += "".join(item.label for item in app.metric)
+    assert not app.exception
+    assert all(fragment in visible for fragment in expected)

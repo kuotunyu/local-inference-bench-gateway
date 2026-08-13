@@ -73,9 +73,9 @@ def _filter_controls(requests: pd.DataFrame) -> pd.DataFrame:
     with filters[1]:
         backend = st.multiselect("Backend", backends, placeholder="全部 Backend")
     with filters[2]:
-        outcome = st.selectbox("Outcome", ["全部", "Success", "Failure"])
+        outcome = st.selectbox("結果", ["全部", "Success", "Failure"])
     with filters[3]:
-        category = st.multiselect("Error category", categories, placeholder="全部 Error")
+        category = st.multiselect("Error 分類", categories, placeholder="全部 Error")
     secondary = st.columns(2)
     status_options = sorted(
         int(value)
@@ -84,7 +84,7 @@ def _filter_controls(requests: pd.DataFrame) -> pd.DataFrame:
     with secondary[0]:
         status_codes = st.multiselect("Status code", status_options, placeholder="全部 Status")
     with secondary[1]:
-        stream_mode = st.selectbox("Transport", ["全部", "Streaming", "Non-streaming"])
+        stream_mode = st.selectbox("傳輸方式", ["全部", "Streaming", "Non-streaming"])
     return apply_request_filters(
         requests,
         aliases=alias,
@@ -100,38 +100,42 @@ def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
     render_page_heading(
         "REQUEST EXPLORER",
         "請求遙測檢視",
-        "依 Alias、Backend、Outcome 與 Error category 篩選 request telemetry；缺失值維持未知，不以 0 取代。",
+        "依 Alias、Backend、結果與 Error 分類篩選 Request Telemetry；缺失值維持未知，不以 0 取代。",
     )
     render_source_badge(
         source_kind,
-        "SQLite request log" + (" · illustrative fixture" if source_kind == "demo" else ""),
+        "SQLite Request log" + (" · 示範 fixture" if source_kind == "demo" else ""),
     )
     if snapshot.requests.empty:
         render_state_message(
-            "尚無 request telemetry",
+            "尚無 Request Telemetry",
             "Gateway 收到第一筆 `/v1/chat/completions` 後，本頁會保留在原位並開始顯示資料。",
         )
         return
     filtered = _filter_controls(snapshot.requests)
     summary = compute_overview(filtered, snapshot.failovers.iloc[0:0])
     cards = [
-        ("FILTERED REQUESTS", f"{summary.request_count:,}", "matching records"),
-        ("SUCCESS RATE", format_metric(summary.success_rate_pct, "%"), "filtered scope"),
-        ("P50 LATENCY", format_metric(summary.p50_latency_ms, " ms", digits=0), "total latency"),
-        ("P95 LATENCY", format_metric(summary.p95_latency_ms, " ms", digits=0), "total latency"),
+        ("篩選後 REQUEST", f"{summary.request_count:,}", "筆符合條件"),
+        ("成功率", format_metric(summary.success_rate_pct, "%"), "目前篩選結果"),
+        ("P50 LATENCY", format_metric(summary.p50_latency_ms, " ms", digits=0), "端到端 latency"),
+        ("P95 LATENCY", format_metric(summary.p95_latency_ms, " ms", digits=0), "端到端 latency"),
     ]
     cards += [
-        ("P50 TTFT", format_metric(summary.p50_ttft_ms, " ms", digits=0), "when present"),
-        ("P95 TTFT", format_metric(summary.p95_ttft_ms, " ms", digits=0), "streaming when present"),
+        ("P50 TTFT", format_metric(summary.p50_ttft_ms, " ms", digits=0), "有資料時顯示"),
         (
-            "TOKEN VOLUME",
+            "P95 TTFT",
+            format_metric(summary.p95_ttft_ms, " ms", digits=0),
+            "Streaming 有資料時顯示",
+        ),
+        (
+            "TOKEN 數量",
             (
                 "—"
                 if summary.prompt_tokens is None or summary.completion_tokens is None
                 else f"{summary.prompt_tokens + summary.completion_tokens:,}"
             ),
             (
-                "upstream usage incomplete"
+                "Upstream usage 不完整"
                 if summary.prompt_tokens is None or summary.completion_tokens is None
                 else f"{summary.prompt_tokens:,} prompt · {summary.completion_tokens:,} completion"
             ),
@@ -163,4 +167,4 @@ def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
         height=REQUEST_TABLE_HEIGHT,
         row_height=36,
     )
-    st.caption("— 代表 upstream 未提供或該 request 不適用；並不代表 0 ms 或 0 tokens。")
+    st.caption("— 代表 Upstream 未提供或該 Request 不適用；並不代表 0 ms 或 0 tokens。")

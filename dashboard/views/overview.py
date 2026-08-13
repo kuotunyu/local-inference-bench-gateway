@@ -99,10 +99,10 @@ def build_overview_model(
 
 def _time_note(model: OverviewModel) -> str:
     if model.observed_from is None or model.observed_to is None:
-        return "目前 observation window 尚無 request telemetry"
+        return "目前觀測時間範圍尚無 Request Telemetry"
     start = model.observed_from.astimezone(DISPLAY_TIMEZONE).strftime("%Y/%m/%d %H:%M")
     end = model.observed_to.astimezone(DISPLAY_TIMEZONE).strftime("%H:%M")
-    return f"Observation window · {start}–{end} UTC+8"
+    return f"觀測時間範圍 · {start}–{end} UTC+8"
 
 
 def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
@@ -136,10 +136,12 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
         )
         .encode(
             x=x_encoding,
-            y=alt.Y("requests:Q", title="Requests / bucket", axis=alt.Axis(titleColor="#566F60")),
+            y=alt.Y(
+                "requests:Q", title="每 bucket Request 數", axis=alt.Axis(titleColor="#566F60")
+            ),
             tooltip=[
                 alt.Tooltip("timestamp:T", title="時間", format="%Y/%m/%d %H:%M"),
-                alt.Tooltip("requests:Q", title="Requests"),
+                alt.Tooltip("requests:Q", title="Request 數"),
             ],
         )
     )
@@ -173,26 +175,26 @@ def _render_health(status: GatewayStatus) -> None:
     st.markdown("### Backend Health · 目前觀測")
     if not status.reachable:
         render_state_message(
-            "Gateway offline",
-            "仍可閱讀已寫入的 telemetry；offline 不等於歷史 Backend Health 或 SLA。",
+            "Gateway 離線",
+            "仍可閱讀已寫入的 Telemetry；離線不代表歷史 Backend Health 或 SLA。",
             "warning",
         )
         return
     if not status.backends:
         render_state_message(
-            "Gateway reachable",
+            "Gateway 可連線",
             f"Backend Health 暫時無法取得（{status.reason}）；目前不推測 backend 狀態。",
         )
         return
     for url, health in status.backends.items():
         healthy = bool(health.get("healthy"))
-        label = "Healthy" if healthy else "Degraded"
+        label = "正常" if healthy else "降級"
         tone = "healthy" if healthy else "warning"
         name = url.split("//")[-1].split("/")[0]
         st.markdown(
             f'<div class="status-card"><span class="status-dot {tone}"></span>'
             f"<strong>{escape_html(name)}</strong><br>"
-            f"<small>{escape_html(label)} · current probe</small></div>",
+            f"<small>{escape_html(label)} · 目前 probe</small></div>",
             unsafe_allow_html=True,
         )
 
@@ -208,45 +210,45 @@ def render_overview(
     render_page_heading(
         "GATEWAY OVERVIEW",
         "推論閘道運行概覽",
-        "彙整 request throughput、latency、routing、failover 與 Backend Health，呈現所選 observation window 的可追溯運行狀態。",
+        "彙整 Request throughput、latency、routing、Failover 與 Backend Health，呈現所選觀測時間範圍內可追溯的運行狀態。",
     )
     source_note = _time_note(model)
     if source_kind == "demo":
-        source_note += " · illustrative fixture，非 production traffic"
+        source_note += " · 示範 fixture，非正式流量"
     render_source_badge(source_kind, source_note)
 
     metrics = model.metrics
     cards = [
         (
-            "REQUEST VOLUME",
+            "REQUEST 數量",
             f"{metrics.request_count:,}",
             (
-                "selected window"
+                "所選時間範圍"
                 if metrics.request_rate_per_min is None
                 else f"{metrics.request_rate_per_min:,.1f} req/min"
             ),
         ),
         (
-            "SUCCESS RATE",
+            "成功率",
             format_metric(metrics.success_rate_pct, "%", digits=1),
-            f"{int(round(metrics.request_count * (metrics.success_rate_pct or 0) / 100)):,} successful",
+            f"{int(round(metrics.request_count * (metrics.success_rate_pct or 0) / 100)):,} 筆成功",
         ),
-        ("P50 LATENCY", format_metric(metrics.p50_latency_ms, " ms", digits=0), "total latency"),
-        ("P95 LATENCY", format_metric(metrics.p95_latency_ms, " ms", digits=0), "total latency"),
+        ("P50 LATENCY", format_metric(metrics.p50_latency_ms, " ms", digits=0), "端到端 latency"),
+        ("P95 LATENCY", format_metric(metrics.p95_latency_ms, " ms", digits=0), "端到端 latency"),
         (
-            "FAILOVER EVENTS",
+            "FAILOVER 次數",
             f"{metrics.failover_count:,}",
             format_metric(metrics.failover_rate_pct, "% of requests", digits=2),
         ),
     ]
     render_metric_grid(cards)
 
-    st.markdown("### Request volume 與 P95 latency")
+    st.markdown("### Request 數量與 P95 latency")
     if model.series.empty:
         render_state_message("尚無趨勢資料", "第一筆 request 寫入後，這裡會顯示時間序列。")
     else:
         st.altair_chart(build_activity_chart(model.series), width="stretch")
-        st.caption("雙軸保留 request volume 與 latency 的真實量級；hover 可讀取精確值。")
+        st.caption("Request 數量與 latency 使用獨立 Y 軸，以保留真實量級；hover 可讀取精確值。")
 
     health_col, route_col, failover_col = st.columns([1, 1, 1.2], gap="medium")
     with health_col:
@@ -255,16 +257,16 @@ def render_overview(
         st.markdown("### Alias Routing")
         for alias, config in registry.items():
             chain = " → ".join(backend.name for backend in config.backends)
-            cap = "uncapped" if config.max_concurrent is None else f"max {config.max_concurrent}"
+            cap = "無上限" if config.max_concurrent is None else f"上限 {config.max_concurrent}"
             st.markdown(f"**{alias}**　`{chain}`　 · {cap}")
     with failover_col:
-        st.markdown("### Recent Failover")
+        st.markdown("### 近期 Failover")
         if snapshot.failovers.empty:
-            st.caption("目前 observation window 沒有 failover event。")
+            st.caption("目前觀測時間範圍沒有 Failover event。")
         else:
             recent = snapshot.failovers.head(4).copy()
             recent["route"] = (
-                recent["failed_backend"].fillna("—") + " → " + recent["next_backend"].fillna("none")
+                recent["failed_backend"].fillna("—") + " → " + recent["next_backend"].fillna("無")
             )
             st.dataframe(
                 recent[["timestamp", "alias", "route", "reason"]],
