@@ -27,6 +27,25 @@ def test_theme_contains_accessible_type_and_semantic_tokens() -> None:
     assert "3.55rem" not in css
 
 
+def test_theme_uses_flat_instrument_surfaces() -> None:
+    css = build_theme_css()
+    assert ".metric-grid" in css
+    assert "border-top:1px solid var(--border)" in css
+    assert "border-bottom:1px solid var(--border)" in css
+    assert ".metric-card" in css
+    assert "border-radius:0" in css
+    assert "box-shadow:none" in css
+    assert ".status-card" in css
+    assert "background:transparent" in css
+    assert 'div[role="radiogroup"]' in css
+    assert "border:0" in css
+    assert '[data-testid="stDataFrame"]' in css
+    assert "border-radius:4px" in css
+    assert '[data-testid="stExpander"]' in css
+    assert ".stButton button" in css
+    assert "border-radius:6px" in css
+
+
 def test_metric_formatter_never_turns_missing_into_zero() -> None:
     assert format_metric(None, " ms") == "—"
     assert format_metric(float("nan"), " ms") == "—"
