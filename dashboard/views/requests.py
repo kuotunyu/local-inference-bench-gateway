@@ -15,6 +15,8 @@ from dashboard.components import (
 from dashboard.metrics import compute_overview, with_error_categories
 from dashboard.models import TelemetrySnapshot
 
+REQUEST_TABLE_HEIGHT = 540
+
 
 def build_request_table(requests: pd.DataFrame) -> pd.DataFrame:
     table = with_error_categories(requests)
@@ -161,5 +163,5 @@ def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
         "stream",
         "error_category",
     ]
-    st.dataframe(table[visible], hide_index=True, width="stretch", height=470)
+    st.dataframe(table[visible], hide_index=True, width="stretch", height=REQUEST_TABLE_HEIGHT)
     st.caption("— 代表 upstream 未提供或該 request 不適用；並不代表 0 ms 或 0 tokens。")

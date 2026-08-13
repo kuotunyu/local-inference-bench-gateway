@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pandas as pd
 
-from dashboard.views.requests import apply_request_filters, build_request_table
+from dashboard.views.requests import (
+    REQUEST_TABLE_HEIGHT,
+    apply_request_filters,
+    build_request_table,
+)
 
 
 def test_request_table_preserves_missing_values_and_newest_first() -> None:
@@ -49,3 +53,7 @@ def test_request_filters_combine_status_and_transport() -> None:
 
     assert len(filtered) == 1
     assert filtered.iloc[0]["status_code"] == 429
+
+
+def test_request_table_uses_remaining_operational_canvas() -> None:
+    assert REQUEST_TABLE_HEIGHT >= 540

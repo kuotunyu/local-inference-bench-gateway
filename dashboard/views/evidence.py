@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
+from dashboard.charts import bar_chart, line_chart
 from dashboard.components import (
     format_metric,
     render_metric_card,
@@ -52,6 +54,122 @@ def _engine_label(value: str) -> str:
 
 def _has_columns(frame: pd.DataFrame, columns: set[str]) -> bool:
     return not frame.empty and columns <= set(frame.columns)
+
+
+def build_throughput_chart(concurrency: pd.DataFrame) -> alt.Chart:
+    frame = concurrency.copy()
+    frame["engine"] = frame["engine"].map(_engine_label)
+    return line_chart(
+        frame,
+        x="concurrency:Q",
+        y="median_aggregate_tok_s:Q",
+        color="engine:N",
+        height=400,
+        x_title="Concurrency",
+        y_title="Aggregate decode throughput / tok/s",
+        tooltip=["engine:N", "concurrency:Q", "median_aggregate_tok_s:Q"],
+        color_range=["#718B7A", "#78909A", "#B1815F"],
+        zero=True,
+    )
+
+
+def build_ttft_chart(concurrency: pd.DataFrame) -> alt.Chart:
+    frame = concurrency.copy()
+    frame["engine"] = frame["engine"].map(_engine_label)
+    frame["P50"] = frame["p50_ttft_s"] * 1000
+    frame["P95"] = frame["p95_ttft_s"] * 1000
+    long = frame.melt(
+        id_vars=["engine", "concurrency"],
+        value_vars=["P50", "P95"],
+        var_name="percentile",
+        value_name="ttft_ms",
+    )
+    long["series"] = long["engine"] + " · " + long["percentile"]
+    return line_chart(
+        long,
+        x="concurrency:Q",
+        y="ttft_ms:Q",
+        color="series:N",
+        height=400,
+        x_title="Concurrency",
+        y_title="TTFT / ms",
+        tooltip=["engine:N", "percentile:N", "concurrency:Q", "ttft_ms:Q"],
+        color_range=["#718B7A", "#9FB2A5", "#78909A", "#A6BBC2", "#B1815F", "#D1AA8E"],
+        zero=True,
+    )
+
+
+def build_prefill_chart(prefill: pd.DataFrame) -> alt.Chart:
+    frame = prefill.copy()
+    frame["engine"] = frame["engine"].map(_engine_label)
+    frame["label"] = frame["engine"] + " · " + frame["prompt_target_tokens"].astype(str)
+    return bar_chart(
+        frame,
+        x="label:N",
+        y="median_ttft_s:Q",
+        color="engine:N",
+        height=350,
+        x_title="Engine · target tokens",
+        y_title="Median TTFT / s",
+        tooltip=["engine:N", "prompt_target_tokens:Q", "median_ttft_s:Q"],
+        color_range=["#718B7A", "#78909A", "#B1815F"],
+    )
+
+
+def build_gateway_cost_chart(overhead: dict) -> alt.Chart:
+    direct = overhead.get("direct", {})
+    via = overhead.get("via_gateway", {})
+    frame = pd.DataFrame(
+        {
+            "path": ["Direct", "Via Gateway"],
+            "Median TTFT": [direct.get("ttft_median_ms"), via.get("ttft_median_ms")],
+            "P95 TTFT": [direct.get("ttft_p95_ms"), via.get("ttft_p95_ms")],
+            "Median total": [direct.get("total_median_ms"), via.get("total_median_ms")],
+        }
+    ).melt(id_vars="path", var_name="metric", value_name="milliseconds")
+    return bar_chart(
+        frame,
+        x="path:N",
+        y="milliseconds:Q",
+        color="metric:N",
+        height=350,
+        x_title=None,
+        y_title="Latency / ms",
+        tooltip=["path:N", "metric:N", "milliseconds:Q"],
+        color_range=["#718B7A", "#B1815F", "#78909A"],
+    )
+
+
+def build_vram_chart(c16: pd.DataFrame) -> alt.Chart:
+    frame = c16.copy()
+    frame["engine"] = frame["engine"].map(_engine_label)
+    return bar_chart(
+        frame,
+        x="engine:N",
+        y="median_vram_baseline_mb:Q",
+        color="engine:N",
+        height=350,
+        x_title=None,
+        y_title="VRAM baseline / MiB",
+        tooltip=["engine:N", "median_vram_baseline_mb:Q"],
+        color_range=["#718B7A", "#78909A", "#B1815F"],
+    )
+
+
+def build_kv_chart(control: pd.DataFrame) -> alt.Chart:
+    long = control.melt(id_vars="concurrency", var_name="setting", value_name="ttft_ms")
+    return line_chart(
+        long,
+        x="concurrency:Q",
+        y="ttft_ms:Q",
+        color="setting:N",
+        height=350,
+        x_title="Concurrency",
+        y_title="P50 TTFT / ms",
+        tooltip=["setting:N", "concurrency:Q", "ttft_ms:Q"],
+        color_range=["#718B7A", "#B1815F"],
+        zero=True,
+    )
 
 
 def render_evidence(evidence: BenchmarkEvidence) -> None:
@@ -118,43 +236,19 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
         with column:
             render_metric_card(*card)
 
-    throughput_col, ttft_col = st.columns(2, gap="large")
-    with throughput_col:
-        st.markdown("### Aggregate decode throughput")
-        if not concurrency_ok:
-            render_state_message(
-                "Artifact unavailable", "concurrency_summary.csv 無法讀取。", "warning"
-            )
-        else:
-            frame = evidence.concurrency.copy()
-            frame["engine"] = frame["engine"].map(_engine_label)
-            pivot = frame.pivot(
-                index="concurrency", columns="engine", values="median_aggregate_tok_s"
-            )
-            st.line_chart(
-                pivot,
-                color=["#718B7A", "#78909A", "#B1815F"],
-                height=310,
-            )
-            st.caption("tokens/sec · five-run median · higher is better")
-    with ttft_col:
-        st.markdown("### P50 / P95 TTFT by concurrency")
-        if concurrency_ok:
-            frame = evidence.concurrency.copy()
-            frame["engine"] = frame["engine"].map(_engine_label)
-            frame["p50_ttft_ms"] = frame["p50_ttft_s"] * 1000
-            frame["p95_ttft_ms"] = frame["p95_ttft_s"] * 1000
-            p50 = frame.pivot(index="concurrency", columns="engine", values="p50_ttft_ms")
-            p95 = frame.pivot(index="concurrency", columns="engine", values="p95_ttft_ms")
-            p50.columns = [f"{column} · P50" for column in p50.columns]
-            p95.columns = [f"{column} · P95" for column in p95.columns]
-            pivot = p50.join(p95)
-            st.line_chart(
-                pivot,
-                color=["#718B7A", "#9FB2A5", "#78909A", "#A6BBC2", "#B1815F", "#D1AA8E"],
-                height=310,
-            )
-            st.caption("milliseconds · solid series labels identify percentile · lower is better")
+    st.markdown("### Aggregate decode throughput")
+    if not concurrency_ok:
+        render_state_message(
+            "Artifact unavailable", "concurrency_summary.csv 無法讀取。", "warning"
+        )
+    else:
+        st.altair_chart(build_throughput_chart(evidence.concurrency), width="stretch")
+        st.caption("tokens/sec · five-run median · higher is better")
+
+    st.markdown("### P50 / P95 TTFT by concurrency")
+    if concurrency_ok:
+        st.altair_chart(build_ttft_chart(evidence.concurrency), width="stretch")
+        st.caption("milliseconds · series labels identify percentile · lower is better")
 
     prefill_col, overhead_col = st.columns([1.2, 1], gap="large")
     with prefill_col:
@@ -163,12 +257,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
             evidence.prefill, {"engine", "prompt_target_tokens", "median_ttft_s"}
         )
         if prefill_ok:
-            frame = evidence.prefill.copy()
-            frame["engine"] = frame["engine"].map(_engine_label)
-            frame["label"] = (
-                frame["engine"] + " · " + frame["prompt_target_tokens"].astype(str) + " tokens"
-            )
-            st.bar_chart(frame.set_index("label")["median_ttft_s"], color="#78909A", height=285)
+            st.altair_chart(build_prefill_chart(evidence.prefill), width="stretch")
             st.caption("median TTFT in seconds · calibrated 1,970 and 7,880 actual-token inputs")
         else:
             render_state_message(
@@ -180,15 +269,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
         direct = overhead.get("direct", {})
         via = overhead.get("via_gateway", {})
         if isinstance(direct, dict) and isinstance(via, dict) and direct and via:
-            compare = pd.DataFrame(
-                {
-                    "path": ["Direct", "Via Gateway"],
-                    "Median TTFT": [direct.get("ttft_median_ms"), via.get("ttft_median_ms")],
-                    "P95 TTFT": [direct.get("ttft_p95_ms"), via.get("ttft_p95_ms")],
-                    "Median total": [direct.get("total_median_ms"), via.get("total_median_ms")],
-                }
-            ).set_index("path")
-            st.bar_chart(compare, color=["#718B7A", "#B1815F", "#78909A"], height=285)
+            st.altair_chart(build_gateway_cost_chart(overhead), width="stretch")
             st.caption(
                 "milliseconds · JSON rewrite、failover bookkeeping 與 SSE pass-through 的量測成本"
             )
@@ -201,10 +282,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
     with vram_col:
         st.markdown("### VRAM baseline · concurrency 16")
         if not c16.empty:
-            vram = c16.copy()
-            vram["engine"] = vram["engine"].map(_engine_label)
-            vram = vram.set_index("engine")[["median_vram_baseline_mb"]]
-            st.bar_chart(vram, color="#718B7A", height=300)
+            st.altair_chart(build_vram_chart(c16), width="stretch")
             st.caption(
                 "MiB · measured baseline，並非模型品質或跨硬體效率排名；不同 frontend 的 memory strategy 不同。"
             )
@@ -224,11 +302,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
                     on[["concurrency", "Unified KV Cache ON"]], on="concurrency"
                 )
                 control[["Unified KV Cache OFF", "Unified KV Cache ON"]] *= 1000
-                st.line_chart(
-                    control.set_index("concurrency"),
-                    color=["#718B7A", "#B1815F"],
-                    height=300,
-                )
+                st.altair_chart(build_kv_chart(control), width="stretch")
                 st.caption(
                     "P50 TTFT / ms · paired controlled observation。ON 在部分 concurrency 出現高延遲；內部分配或 scheduling 解釋仍是 hypothesis。"
                 )
