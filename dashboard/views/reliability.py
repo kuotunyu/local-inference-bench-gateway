@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
+from dashboard.charts import style_chart
 from dashboard.components import (
     escape_html,
     render_page_heading,
@@ -49,6 +51,24 @@ def build_reliability_model(
     ]
     backpressure = categorized["error_category"].eq("Backpressure").sum()
     return ReliabilityModel("Backend Health · 目前觀測", routes, errors, int(backpressure))
+
+
+def build_error_chart(errors: pd.DataFrame) -> alt.Chart:
+    """Render failure categories with readable labels and direct values."""
+    chart = (
+        alt.Chart(errors)
+        .mark_bar(color="#A45F5F", cornerRadiusEnd=5, height=30)
+        .encode(
+            x=alt.X("size:Q", title="Observed failures", axis=alt.Axis(tickMinStep=1)),
+            y=alt.Y("error_category:N", title=None, sort="-x"),
+            tooltip=[
+                alt.Tooltip("error_category:N", title="Category"),
+                alt.Tooltip("size:Q", title="Count"),
+            ],
+        )
+        .properties(height=360)
+    )
+    return style_chart(chart)
 
 
 def render_reliability(
@@ -110,13 +130,13 @@ def render_reliability(
                 )
             st.dataframe(health_rows, hide_index=True, width="stretch")
 
-    error_col, pressure_col = st.columns([1.4, 1], gap="large")
+    error_col, pressure_col = st.columns([2.15, 1], gap="large")
     with error_col:
         st.markdown("### Error Categories")
         if model.errors.empty:
             st.caption("目前沒有 failure record。")
         else:
-            st.bar_chart(model.errors.set_index("error_category"), color="#A45F5F", height=235)
+            st.altair_chart(build_error_chart(model.errors), width="stretch")
     with pressure_col:
         st.markdown("### Backpressure")
         st.metric("Observed HTTP 429", model.backpressure_count)

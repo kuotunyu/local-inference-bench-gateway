@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
+from dashboard.charts import style_chart
 from dashboard.components import (
     escape_html,
     format_metric,
@@ -66,6 +68,53 @@ def _time_note(model: OverviewModel) -> str:
     start = model.observed_from.astimezone(DISPLAY_TIMEZONE).strftime("%Y/%m/%d %H:%M")
     end = model.observed_to.astimezone(DISPLAY_TIMEZONE).strftime("%H:%M")
     return f"Observation window · {start}–{end} UTC+8"
+
+
+def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
+    """Combine request volume and latency without compressing either scale."""
+    frame = series.copy()
+    frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+    requests = (
+        alt.Chart(frame)
+        .mark_bar(
+            color="#718B7A", opacity=0.78, size=34, cornerRadiusTopLeft=5, cornerRadiusTopRight=5
+        )
+        .encode(
+            x=alt.X("timestamp:T", title=None, axis=alt.Axis(format="%H:%M", labelAngle=0)),
+            y=alt.Y("requests:Q", title="Requests / bucket", axis=alt.Axis(titleColor="#566F60")),
+            tooltip=[
+                alt.Tooltip("timestamp:T", title="時間", format="%Y/%m/%d %H:%M"),
+                alt.Tooltip("requests:Q", title="Requests"),
+            ],
+        )
+    )
+    latency = (
+        alt.Chart(frame)
+        .mark_line(
+            color="#B1815F",
+            strokeWidth=3,
+            point=alt.OverlayMarkDef(size=76, filled=True, strokeWidth=1.5),
+        )
+        .encode(
+            x=alt.X("timestamp:T", title=None, axis=alt.Axis(format="%H:%M", labelAngle=0)),
+            y=alt.Y(
+                "p95_latency_ms:Q",
+                title="P95 latency / ms",
+                scale=alt.Scale(zero=False),
+                axis=alt.Axis(orient="right", titleColor="#9A684A"),
+            ),
+            tooltip=[
+                alt.Tooltip("timestamp:T", title="時間", format="%Y/%m/%d %H:%M"),
+                alt.Tooltip("p95_latency_ms:Q", title="P95 latency", format=",.0f"),
+            ],
+        )
+    )
+    return style_chart(
+        alt.layer(requests, latency)
+        .resolve_scale(y="independent")
+        .properties(height=400)
+        .interactive(bind_y=False)
+    )
 
 
 def _render_health(status: GatewayStatus) -> None:
@@ -143,25 +192,16 @@ def render_overview(
         with column:
             render_metric_card(*card)
 
-    left, right = st.columns([1.65, 1], gap="large")
-    with left:
-        st.markdown("### Request volume 與 P95 latency")
-        if model.series.empty:
-            render_state_message("尚無趨勢資料", "第一筆 request 寫入後，這裡會顯示時間序列。")
-        else:
-            request_chart, latency_chart = st.columns(2)
-            series = model.series.set_index("timestamp")
-            with request_chart:
-                st.caption("REQUESTS / BUCKET")
-                st.bar_chart(series[["requests"]], color="#718B7A", height=245)
-            with latency_chart:
-                st.caption("P95 LATENCY / MS")
-                st.line_chart(series[["p95_latency_ms"]], color="#B1815F", height=245)
-            st.caption("分離量級避免小流量被 latency 軸壓扁；hover 可讀取精確值。")
-    with right:
-        _render_health(status)
+    st.markdown("### Request volume 與 P95 latency")
+    if model.series.empty:
+        render_state_message("尚無趨勢資料", "第一筆 request 寫入後，這裡會顯示時間序列。")
+    else:
+        st.altair_chart(build_activity_chart(model.series), width="stretch")
+        st.caption("雙軸保留 request volume 與 latency 的真實量級；hover 可讀取精確值。")
 
-    route_col, failover_col = st.columns([1.15, 1], gap="large")
+    health_col, route_col, failover_col = st.columns([1, 1, 1.2], gap="medium")
+    with health_col:
+        _render_health(status)
     with route_col:
         st.markdown("### Alias Routing")
         for alias, config in registry.items():
