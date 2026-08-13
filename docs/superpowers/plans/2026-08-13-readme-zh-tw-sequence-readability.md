@@ -102,7 +102,12 @@ for label in (
 將 participant contract 改為：
 
 ```python
-for participant in ("Client", "Gateway", "Primary as Primary Backend", "Fallback as Fallback Backend"):
+for participant in (
+    "Client",
+    "Gateway",
+    "Primary as Primary Backend",
+    "Fallback as Fallback Backend",
+):
     assert f"participant {participant}" in failover_lifecycle
 for removed_participant in ("Telemetry", "Limiter"):
     assert f"participant {removed_participant}" not in failover_lifecycle
