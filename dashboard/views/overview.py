@@ -12,6 +12,7 @@ import streamlit as st
 
 from dashboard.charts import style_chart
 from dashboard.components import (
+    chart_measure_key_html,
     escape_html,
     format_metric,
     render_metric_grid,
@@ -172,18 +173,6 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
     )
 
 
-def activity_measure_key_html() -> str:
-    """Map each horizontal measure label to its chart mark without rotated text."""
-    return (
-        '<div class="activity-measure-key">'
-        '<span class="activity-key-item request"><i class="activity-key-bar" '
-        'aria-hidden="true"></i>Request 數量／bucket</span>'
-        '<span class="activity-key-item latency"><i class="activity-key-line" '
-        'aria-hidden="true"></i>P95 latency／ms</span>'
-        "</div>"
-    )
-
-
 def _render_health(status: GatewayStatus) -> None:
     st.markdown("### Backend Health · 目前觀測")
     if not status.reachable:
@@ -264,7 +253,15 @@ def render_overview(
     if model.series.empty:
         render_state_message("尚無趨勢資料", "第一筆 Request 寫入後，這裡會顯示時間序列。")
     else:
-        st.markdown(activity_measure_key_html(), unsafe_allow_html=True)
+        st.markdown(
+            chart_measure_key_html(
+                [
+                    ("bar", "request", "Request 數量／bucket"),
+                    ("line", "latency", "P95 latency／ms"),
+                ]
+            ),
+            unsafe_allow_html=True,
+        )
         st.altair_chart(build_activity_chart(model.series), width="stretch")
         st.caption("Request 數量與 latency 使用獨立 Y 軸，以保留真實量級；hover 可讀取精確值。")
 

@@ -1,4 +1,11 @@
-from dashboard.components import brand_block_html, metric_grid_html, page_heading_html
+import pytest
+
+from dashboard import components
+from dashboard.components import (
+    brand_block_html,
+    metric_grid_html,
+    page_heading_html,
+)
 
 
 def test_brand_block_fills_the_header_with_product_context() -> None:
@@ -40,3 +47,26 @@ def test_metric_grid_exposes_cardinality_for_stable_responsive_layout() -> None:
 
     assert 'class="metric-grid metric-count-7"' in markup
     assert markup.count('class="metric-card"') == 7
+
+
+def test_chart_measure_key_maps_marks_and_escapes_labels() -> None:
+    assert hasattr(components, "chart_measure_key_html")
+    markup = components.chart_measure_key_html(
+        [("bar", "request", "Request <count>"), ("line", "latency", "P95 / ms")]
+    )
+
+    assert 'class="chart-measure-key chart-key-count-2"' in markup
+    assert 'class="chart-key-item request"' in markup
+    assert 'class="chart-key-item latency"' in markup
+    assert 'class="chart-key-bar" aria-hidden="true"' in markup
+    assert 'class="chart-key-line" aria-hidden="true"' in markup
+    assert "Request &lt;count&gt;" in markup
+    assert "Request <count>" not in markup
+
+
+def test_chart_measure_key_rejects_unknown_mark_or_tone() -> None:
+    assert hasattr(components, "chart_measure_key_html")
+    with pytest.raises(ValueError, match="unsupported chart mark"):
+        components.chart_measure_key_html([("area", "neutral", "Throughput")])
+    with pytest.raises(ValueError, match="unsupported chart tone"):
+        components.chart_measure_key_html([("line", "danger", "Throughput")])

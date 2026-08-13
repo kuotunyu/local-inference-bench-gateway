@@ -49,19 +49,21 @@ def test_theme_uses_flat_instrument_surfaces() -> None:
     assert '[data-testid="stExpander"]' in css
     assert ".stButton button" in css
     assert "border-radius:6px" in css
-    assert ".activity-measure-key" in css
-    assert ".activity-key-bar" in css
-    assert ".activity-key-line" in css
-    assert "grid-template-columns:minmax(0,1fr) minmax(0,1fr)" in css
+    assert ".chart-measure-key" in css
+    assert ".chart-key-count-1" in css
+    assert ".chart-key-count-2" in css
+    assert ".chart-key-bar" in css
+    assert ".chart-key-line" in css
+    assert "repeat(var(--chart-key-columns),minmax(0,1fr))" in css
 
-    key_rule = re.search(r"\.activity-measure-key \{([^}]*)\}", css)
-    item_rule = re.search(r"\.activity-key-item \{([^}]*)\}", css)
+    key_rule = re.search(r"\.chart-measure-key \{([^}]*)\}", css)
+    item_rule = re.search(r"\.chart-key-item \{([^}]*)\}", css)
     assert key_rule is not None
     assert item_rule is not None
     assert "border" not in key_rule.group(1)
     assert "border-radius" not in key_rule.group(1)
     assert "min-width:0" in item_rule.group(1)
-    assert ".activity-measure-key { gap:.65rem; font-size:15px; }" in css
+    assert ".chart-measure-key { gap:.65rem; font-size:15px; }" in css
 
 
 def test_metric_formatter_never_turns_missing_into_zero() -> None:

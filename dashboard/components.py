@@ -8,6 +8,9 @@ import math
 import streamlit as st
 
 MetricCard = tuple[str, str, str]
+ChartMeasure = tuple[str, str, str]
+_CHART_MARKS = {"bar", "line"}
+_CHART_TONES = {"request", "latency", "neutral"}
 
 
 def escape_html(value: object) -> str:
@@ -61,6 +64,27 @@ def metric_grid_html(cards: list[MetricCard]) -> str:
         for label, value, detail in cards
     )
     return f'<div class="metric-grid metric-count-{len(cards)}">{items}</div>'
+
+
+def chart_measure_key_html(measures: list[ChartMeasure]) -> str:
+    """Render one or two accessible horizontal measure labels for a chart."""
+    if not 1 <= len(measures) <= 2:
+        raise ValueError("chart measure key requires one or two measures")
+    items = []
+    for mark, tone, label in measures:
+        if mark not in _CHART_MARKS:
+            raise ValueError(f"unsupported chart mark: {mark}")
+        if tone not in _CHART_TONES:
+            raise ValueError(f"unsupported chart tone: {tone}")
+        items.append(
+            f'<span class="chart-key-item {tone}">'
+            f'<i class="chart-key-{mark}" aria-hidden="true"></i>{escape_html(label)}</span>'
+        )
+    return (
+        f'<div class="chart-measure-key chart-key-count-{len(measures)}">'
+        + "".join(items)
+        + "</div>"
+    )
 
 
 def render_metric_grid(cards: list[MetricCard]) -> None:
