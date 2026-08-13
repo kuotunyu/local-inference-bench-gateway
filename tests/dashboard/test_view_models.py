@@ -35,12 +35,12 @@ def test_overview_activity_chart_uses_full_operational_canvas(tmp_path: Path) ->
     assert len(spec["layer"]) == 2
     assert spec["resolve"]["scale"]["y"] == "independent"
     bar, line = spec["layer"]
-    assert bar["mark"]["size"] == {"expr": "min(46, width / 9 * 0.72)"}
+    assert bar["mark"]["size"] == {"expr": "min(54, width / 9 * 0.82)"}
     assert bar["mark"]["color"] == "#5F7F6B"
     assert bar["mark"]["opacity"] == 0.9
-    assert line["mark"]["strokeWidth"] == 4
+    assert line["mark"]["strokeWidth"] == 5
     assert line["mark"]["color"] == "#B56F45"
-    assert line["mark"]["point"]["size"] == 96
+    assert line["mark"]["point"]["size"] == 120
     assert line["mark"]["point"]["strokeWidth"] == 2
     assert bar["encoding"]["x"]["scale"] == line["encoding"]["x"]["scale"]
     assert bar["encoding"]["x"]["axis"]["tickSize"] == 6
@@ -85,7 +85,7 @@ def test_activity_bar_width_scales_with_six_hour_bucket_density() -> None:
 
     spec = build_activity_chart(frame).to_dict()
 
-    assert spec["layer"][0]["mark"]["size"] == {"expr": "min(46, width / 39 * 0.72)"}
+    assert spec["layer"][0]["mark"]["size"] == {"expr": "min(54, width / 39 * 0.82)"}
 
 
 def test_activity_bar_width_scales_with_twenty_four_hour_bucket_density() -> None:
@@ -99,7 +99,7 @@ def test_activity_bar_width_scales_with_twenty_four_hour_bucket_density() -> Non
 
     spec = build_activity_chart(frame).to_dict()
 
-    assert spec["layer"][0]["mark"]["size"] == {"expr": "min(46, width / 147 * 0.72)"}
+    assert spec["layer"][0]["mark"]["size"] == {"expr": "min(54, width / 147 * 0.82)"}
 
 
 def test_health_is_current_observation_not_uptime(tmp_path: Path) -> None:

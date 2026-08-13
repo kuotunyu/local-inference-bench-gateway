@@ -132,7 +132,7 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
         .mark_bar(
             color="#5F7F6B",
             opacity=0.9,
-            size=alt.ExprRef(expr=f"min(46, width / {bucket_slots} * 0.72)"),
+            size=alt.ExprRef(expr=f"min(54, width / {bucket_slots} * 0.82)"),
         )
         .encode(
             x=x_encoding,
@@ -147,8 +147,8 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
         alt.Chart(frame)
         .mark_line(
             color="#B56F45",
-            strokeWidth=4,
-            point=alt.OverlayMarkDef(color="#B56F45", size=96, filled=True, strokeWidth=2),
+            strokeWidth=5,
+            point=alt.OverlayMarkDef(color="#B56F45", size=120, filled=True, strokeWidth=2),
         )
         .encode(
             x=x_encoding,

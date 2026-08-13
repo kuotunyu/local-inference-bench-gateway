@@ -30,7 +30,7 @@
 - Consumes: `build_activity_chart(series: pd.DataFrame) -> alt.Chart` and its valid bucket count.
 - Produces: an Altair Bar mark sized by `min(54, width / bucket_slots * 0.82)` and a P95 line with five-pixel stroke and 120-area points.
 
-- [ ] **Step 1: Update generated-spec expectations**
+- [x] **Step 1: Update generated-spec expectations**
 
 In `tests/dashboard/test_view_models.py`, change the seven-bucket expectation to:
 
@@ -47,7 +47,7 @@ assert spec["layer"][0]["mark"]["size"] == {"expr": "min(54, width / 39 * 0.82)"
 assert spec["layer"][0]["mark"]["size"] == {"expr": "min(54, width / 147 * 0.82)"}
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -57,22 +57,22 @@ uv run pytest tests/dashboard/test_view_models.py -q
 
 Expected: the chart mark assertions fail because production still emits a 46 px maximum, 0.72 density multiplier, four-pixel line, and 96-area points.
 
-- [ ] **Step 3: Apply the approved Altair mark constants**
+- [x] **Step 3: Apply the approved Altair mark constants**
 
 In `dashboard/views/overview.py`, update the Bar size expression and line mark:
 
 ```python
-size=alt.ExprRef(expr=f"min(54, width / {bucket_slots} * 0.82)"),
+size = (alt.ExprRef(expr=f"min(54, width / {bucket_slots} * 0.82)"),)
 ```
 
 ```python
-strokeWidth=5,
-point=alt.OverlayMarkDef(color="#B56F45", size=120, filled=True, strokeWidth=2),
+strokeWidth = (5,)
+point = (alt.OverlayMarkDef(color="#B56F45", size=120, filled=True, strokeWidth=2),)
 ```
 
 Do not change either mark's color, opacity, encoding, scales, axes, or tooltip.
 
-- [ ] **Step 4: Run focused verification**
+- [x] **Step 4: Run focused verification**
 
 Run:
 
@@ -84,7 +84,7 @@ uv run ruff format --check dashboard/views/overview.py tests/dashboard/test_view
 
 Expected: all focused tests and Ruff checks pass.
 
-- [ ] **Step 5: Run complete repository verification**
+- [x] **Step 5: Run complete repository verification**
 
 Run:
 
@@ -98,11 +98,11 @@ uv run --frozen python -m release_checks.cli
 
 Expected: dashboard and full tests, Ruff, and all publication/evidence/document/docker checks pass.
 
-- [ ] **Step 6: Restart and inspect the branch preview once**
+- [x] **Step 6: Restart and inspect the branch preview once**
 
 Restart Streamlit at `http://127.0.0.1:8502/`. Inspect Overview at desktop and 390 px. Confirm that Bars and the P95 line are visibly heavier, Bars remain separated, axes remain readable, no horizontal overflow appears, and no Streamlit exception is rendered.
 
-- [ ] **Step 7: Record verification and commit**
+- [x] **Step 7: Record verification and commit**
 
 Append the actual test counts and browser result under an `Execution Notes` heading in this plan, then run:
 
@@ -113,3 +113,13 @@ git status --short
 ```
 
 Expected: the commit succeeds and the worktree is clean.
+
+## Execution Notes
+
+- TDD RED produced three expected failures for the 7-, 37-, and 145-bucket Bar expressions.
+- Focused verification passed: eight view-model tests plus Ruff lint and format checks.
+- Complete verification passed: 69 dashboard tests, 157 repository tests, Ruff lint and format,
+  publication/evidence/document/docker release checks, and the Impeccable detector.
+- Browser verification passed at 1280 px and 390 px with no horizontal overflow or rendered
+  Streamlit exception. Desktop Bars render at approximately 54 px, mobile Bars at approximately
+  22 px, the P95 stroke renders at 5 px, and all seven ten-minute labels remain readable.
