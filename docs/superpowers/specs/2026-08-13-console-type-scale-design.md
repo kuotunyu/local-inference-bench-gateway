@@ -11,6 +11,7 @@ or reintroducing wasted space and wrapping defects.
 - Supporting UI text moves from 17 px to 19 px: source notes, metric labels/details, status details,
   callout copy, chart keys, captions, and inline technical code.
 - Dense data text moves from 15 px to 17 px: DataFrame headers and cells.
+- JSON and code viewers move from 14 px to 17 px.
 - Chart axes and legends move from 15–16 px to 18 px.
 - Mobile body text moves from 16 px to 18 px; mobile supporting text moves from 15 px to 17 px.
 - Display headings and large metric values remain unchanged so hierarchy does not flatten.

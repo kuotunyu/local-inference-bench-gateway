@@ -10,15 +10,15 @@ def test_theme_contains_accessible_type_and_semantic_tokens() -> None:
     assert "--canvas: #F1EFE8" in css
     assert "--healthy: #718B7A" in css
     assert "html { font-size: 18px; }" in css
-    assert "font-size: 16px" in css
+    assert "font-size: 18px" in css
     assert (
-        'p, label, [data-testid="stMarkdownContainer"] { font-size:16px; line-height:1.5; }' in css
+        'p, label, [data-testid="stMarkdownContainer"] { font-size:18px; line-height:1.5; }' in css
     )
     assert "prefers-reduced-motion" in css
     assert "font-size:.72rem" not in css
     assert "font-size:.78rem" not in css
     assert "font-size:.8rem" not in css
-    assert "font-size:17px" in css
+    assert "font-size:19px" in css
     assert ".ops-heading" in css
     assert "grid-template-columns:minmax(0,38fr) minmax(0,62fr)" in css
     assert "grid-template-areas:" in css
@@ -51,8 +51,8 @@ def test_theme_uses_flat_instrument_surfaces() -> None:
     assert "box-shadow:none" in dataframe_rule.group(1)
     assert '[data-testid="stDataFrameResizable"]' in css
     assert '[data-testid="stDataFrameGlideDataEditor"]' in css
-    assert "--gdg-header-font-style:600 15px" in css
-    assert "--gdg-base-font-style:400 15px" in css
+    assert "--gdg-header-font-style:600 17px" in css
+    assert "--gdg-base-font-style:400 17px" in css
     assert ".provenance-detail-gap { height:.65rem; }" in css
     assert '[data-testid="stExpander"]' in css
     assert ".stButton button" in css
@@ -71,7 +71,7 @@ def test_theme_uses_flat_instrument_surfaces() -> None:
     assert "border" not in key_rule.group(1)
     assert "border-radius" not in key_rule.group(1)
     assert "min-width:0" in item_rule.group(1)
-    assert ".chart-measure-key { gap:.65rem; font-size:15px; }" in css
+    assert ".chart-measure-key { gap:.65rem; font-size:17px; }" in css
     assert ".chart-key-item.request .chart-key-bar { background:#5F7F6B; }" in css
     assert ".chart-key-item.latency .chart-key-line { border-top-color:#B56F45; }" in css
     assert ".chart-key-item.latency .chart-key-line::after { background:#B56F45; }" in css
@@ -95,8 +95,26 @@ def test_seven_metric_ribbon_uses_vertical_density() -> None:
     assert "word-break:normal" in detail_rule.group(1)
     assert ".metric-count-7 .metric-card { min-height:104px; }" in css
     assert ".metric-count-7 .metric-card { min-height:100px; display:block; }" in css
-    assert "@media (max-width: 1320px)" in css
-    assert "@media (max-width: 1180px)" not in css
+    assert "@media (max-width: 1440px)" in css
+    assert "@media (max-width: 1320px)" not in css
+
+
+def test_small_text_roles_are_raised_without_inflating_display_type() -> None:
+    css = build_theme_css()
+
+    assert ".source-badge" in css and "font-size:19px" in css
+    assert ".source-note { color:var(--ink-muted); font-size:19px; }" in css
+    assert ".metric-label" in css and "font-size:19px" in css
+    assert ".metric-detail { grid-area:detail; color:var(--ink-muted); font-size:19px; }" in css
+    assert ".status-card small { font-size:19px; line-height:1.45; }" in css
+    assert ".callout-copy { color:var(--ink-muted); font-size:19px; }" in css
+    assert '[data-testid="stCaptionContainer"] p { font-size:19px' in css
+    assert '[data-testid="stMarkdownContainer"] code { font-size:19px; }' in css
+    assert '[data-testid="stJson"] * { font-size:17px !important;' in css
+    assert '[data-testid="stCode"] code { font-size:17px !important;' in css
+    assert ".source-badge, .source-note, .metric-label, .metric-detail, .callout-copy," in css
+    assert ".status-card small { font-size:17px !important; }" in css
+    assert "font-size:2.65rem" not in css
 
 
 def test_metric_formatter_never_turns_missing_into_zero() -> None:

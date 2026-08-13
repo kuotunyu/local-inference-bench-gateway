@@ -29,12 +29,12 @@ metric values, data, and application behavior unchanged.
 
 **Interfaces:**
 - Consumes: `build_theme_css() -> str` and existing semantic selectors.
-- Produces: 19 px desktop supporting roles, 17 px DataFrame roles, and 18/17 px mobile roles.
+- Produces: 19 px desktop supporting roles, 17 px DataFrame/technical viewer roles, and 18/17 px mobile roles.
 
-- [ ] Write failing assertions for every new CSS role floor and the Request ribbon overflow guard.
-- [ ] Run the focused theme tests and confirm they fail on the old 15–17 px values.
-- [ ] Update shared role sizes, inline code, DataFrame variables, mobile overrides, and Request-ribbon spacing/breakpoint without reducing type.
-- [ ] Run focused tests and confirm they pass.
+- [x] Write failing assertions for every new CSS role floor and the Request ribbon overflow guard.
+- [x] Run the focused theme tests and confirm they fail on the old 14–17 px values.
+- [x] Update shared role sizes, inline code, DataFrame/technical viewers, mobile overrides, and Request-ribbon spacing/breakpoint without reducing type.
+- [x] Run focused tests and confirm they pass.
 
 ### Task 2: Raise Chart Typography
 
@@ -46,10 +46,10 @@ metric values, data, and application behavior unchanged.
 - Consumes: `chart_theme() -> dict`.
 - Produces: 18 px axis labels/titles and legend labels/titles for every Altair chart.
 
-- [ ] Write failing chart-theme assertions for the 18 px floor.
-- [ ] Run the focused chart tests and confirm they fail on the old 15–16 px values.
-- [ ] Update only shared chart typography tokens.
-- [ ] Run focused tests and confirm they pass without changing chart data or encodings.
+- [x] Write failing chart-theme assertions for the 18 px floor.
+- [x] Run the focused chart tests and confirm they fail on the old 15–16 px values.
+- [x] Update only shared chart typography tokens.
+- [x] Run focused tests and confirm they pass without changing chart data or encodings.
 
 ### Task 3: Render and Verify
 
@@ -60,7 +60,7 @@ metric values, data, and application behavior unchanged.
 - Consumes: the shared Streamlit and Altair type roles from Tasks 1–2.
 - Produces: a verified preview at `http://127.0.0.1:8501/`.
 
-- [ ] Inspect Request, Benchmark, Overview, and Routing at wide and ordinary widths in one bounded browser pass.
-- [ ] Confirm no horizontal overflow, clipping, split words, or Streamlit exceptions.
-- [ ] Run full pytest, Ruff, release checks, detector, and `git diff --check`.
-- [ ] Commit the scoped change and keep the verified Request page open for review.
+- [x] Inspect Request, Benchmark, Overview, and Routing in the live browser and inspect the wide responsive rules.
+- [x] Confirm no horizontal overflow, clipping, split words, or Streamlit exceptions.
+- [x] Run full pytest, Ruff, release checks, detector, and `git diff --check`.
+- [x] Commit the scoped change and keep the verified Request page open for review.
