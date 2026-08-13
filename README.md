@@ -198,6 +198,8 @@ uv run uvicorn gateway.app:app --host 127.0.0.1 --port 9000
 
 ```powershell
 uv sync --frozen --all-extras
+uv run --frozen ruff check .
+uv run --frozen ruff format --check .
 uv run --frozen pytest -q
 uv run --frozen python -m release_checks.cli
 ```
