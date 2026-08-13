@@ -363,8 +363,13 @@ Expected: commit succeeds and the worktree is clean.
   pass retained visible separation, readable alternating labels, and no horizontal overflow.
 - Flattened KPI metrics into one instrument rail, status cards into divided rows, and navigation into
   a borderless selected-state treatment. Controls, callouts, tables, and expanders retain boundaries.
-- Automated verification passed: 66 dashboard tests, 154 full tests, Ruff lint and format checks,
+- Automated verification passed: 69 dashboard tests, 157 full tests, Ruff lint and format checks,
   publication/evidence/document/docker release checks, and the Impeccable detector.
 - Desktop and 390 px passes covered all four views without horizontal overflow or rendered Streamlit
   exceptions. Vega emitted the pre-existing `Infinite extent` warnings for intentionally unavailable
   benchmark dimensions; no new console error was introduced by this change.
+- Final review extended responsive coverage beyond the default fixture: bar width now uses both chart
+  width and valid bucket count, with explicit 6-hour (37-bucket) and 24-hour (145-bucket) spec tests.
+  Metric rails expose their cardinality; the seven-metric Requests rail renders 7 columns at 1280 px,
+  4 + 3 columns at 960 px, and 2 + 2 + 2 + 1 columns at 390 px with correct row separators and no
+  horizontal overflow.
