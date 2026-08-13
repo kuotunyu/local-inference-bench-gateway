@@ -82,6 +82,14 @@ div[role="radiogroup"] { gap:.38rem; padding:0; border:0; border-radius:0; backg
 div[role="radiogroup"] label { padding:.45rem .72rem; border-bottom:2px solid transparent; border-radius:0; }
 div[role="radiogroup"] label:has(input:checked) { border-bottom-color:var(--healthy); background:rgba(113,139,122,.10); }
 [data-testid="stDataFrame"] { border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+[data-testid="stMarkdownContainer"]:has(.activity-measure-key) { margin-bottom:-.15rem; }
+.activity-measure-key { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:center; gap:1rem; margin:.05rem 0 0; padding:0 .1rem; font-size:17px; font-weight:780; line-height:1.35; }
+.activity-key-item { display:flex; align-items:center; gap:.52rem; min-width:0; }
+.activity-key-item.request { color:#566F60; }
+.activity-key-item.latency { justify-content:flex-end; color:#9A684A; text-align:right; }
+.activity-key-bar { flex:0 0 auto; width:1.05rem; height:.68rem; background:#5F7F6B; }
+.activity-key-line { position:relative; flex:0 0 auto; width:1.5rem; height:0; border-top:4px solid #B56F45; }
+.activity-key-line::after { content:""; position:absolute; top:-.34rem; left:.55rem; width:.48rem; height:.48rem; border-radius:50%; background:#B56F45; }
 [data-testid="stVegaLiteChart"] { margin:.1rem 0 .35rem; }
 [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { font-size:17px !important; line-height:1.45 !important; }
 [data-testid="stExpander"] { border-color:var(--border); border-radius:4px; background:rgba(255,253,249,.66); }
@@ -108,6 +116,7 @@ div[data-baseweb="select"] > div { border-radius:6px; }
   .source-badge, .source-note, .metric-label, .metric-detail, .callout-copy,
   [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p,
   .status-card small { font-size:15px !important; }
+  .activity-measure-key { gap:.65rem; font-size:15px; }
 }
 @media (max-width: 860px) {
   .ops-heading { grid-template-columns:minmax(0,1fr); gap:.25rem; align-items:start; }

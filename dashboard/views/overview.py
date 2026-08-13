@@ -137,7 +137,8 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
         .encode(
             x=x_encoding,
             y=alt.Y(
-                "requests:Q", title="每 bucket Request 數", axis=alt.Axis(titleColor="#566F60")
+                "requests:Q",
+                title=None,
             ),
             tooltip=[
                 alt.Tooltip("timestamp:T", title="時間", format="%Y/%m/%d %H:%M"),
@@ -156,9 +157,9 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
             x=x_encoding,
             y=alt.Y(
                 "p95_latency_ms:Q",
-                title="P95 latency / ms",
+                title=None,
                 scale=alt.Scale(zero=False),
-                axis=alt.Axis(orient="right", titleColor="#9A684A"),
+                axis=alt.Axis(orient="right"),
             ),
             tooltip=[
                 alt.Tooltip("timestamp:T", title="時間", format="%Y/%m/%d %H:%M"),
@@ -168,6 +169,18 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
     )
     return style_chart(
         alt.layer(requests, latency).resolve_scale(y="independent").properties(height=400)
+    )
+
+
+def activity_measure_key_html() -> str:
+    """Map each horizontal measure label to its chart mark without rotated text."""
+    return (
+        '<div class="activity-measure-key">'
+        '<span class="activity-key-item request"><i class="activity-key-bar" '
+        'aria-hidden="true"></i>Request 數量／bucket</span>'
+        '<span class="activity-key-item latency"><i class="activity-key-line" '
+        'aria-hidden="true"></i>P95 latency／ms</span>'
+        "</div>"
     )
 
 
@@ -251,6 +264,7 @@ def render_overview(
     if model.series.empty:
         render_state_message("尚無趨勢資料", "第一筆 Request 寫入後，這裡會顯示時間序列。")
     else:
+        st.markdown(activity_measure_key_html(), unsafe_allow_html=True)
         st.altair_chart(build_activity_chart(model.series), width="stretch")
         st.caption("Request 數量與 latency 使用獨立 Y 軸，以保留真實量級；hover 可讀取精確值。")
 

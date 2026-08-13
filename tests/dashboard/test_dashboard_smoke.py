@@ -82,6 +82,8 @@ def test_console_views_render_neutral_scientific_titles(
                 "成功率",
                 "FAILOVER 次數",
                 "占 Request 的 5.00%",
+                "Request 數量／bucket",
+                "P95 latency／ms",
                 "近期 Failover",
             ],
         ),

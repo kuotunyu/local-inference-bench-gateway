@@ -48,6 +48,10 @@ def test_theme_uses_flat_instrument_surfaces() -> None:
     assert '[data-testid="stExpander"]' in css
     assert ".stButton button" in css
     assert "border-radius:6px" in css
+    assert ".activity-measure-key" in css
+    assert ".activity-key-bar" in css
+    assert ".activity-key-line" in css
+    assert "grid-template-columns:minmax(0,1fr) minmax(0,1fr)" in css
 
 
 def test_metric_formatter_never_turns_missing_into_zero() -> None:

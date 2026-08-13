@@ -45,9 +45,10 @@ def test_overview_activity_chart_uses_full_operational_canvas(tmp_path: Path) ->
     assert bar["encoding"]["x"]["scale"] == line["encoding"]["x"]["scale"]
     assert bar["encoding"]["x"]["axis"]["tickSize"] == 6
     assert bar["encoding"]["x"]["axis"]["labelOverlap"] == "greedy"
-    assert bar["encoding"]["y"]["title"] == "每 bucket Request 數"
+    assert bar["encoding"]["y"]["title"] is None
     assert bar["encoding"]["tooltip"][1]["title"] == "Request 數"
-    assert line["encoding"]["y"]["title"] == "P95 latency / ms"
+    assert line["encoding"]["y"]["title"] is None
+    assert line["encoding"]["y"]["axis"]["orient"] == "right"
 
 
 def test_activity_time_guide_pads_half_a_bucket_and_uses_ten_minute_ticks() -> None:
