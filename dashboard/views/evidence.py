@@ -387,6 +387,9 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
 
     st.markdown("### 測量方法與 provenance")
     render_state_message("適用範圍", model.scope_note)
+    st.markdown(
+        '<div class="provenance-detail-gap" aria-hidden="true"></div>', unsafe_allow_html=True
+    )
     measurement = evidence.provenance.get("measurement", {})
     if not isinstance(measurement, dict):
         measurement = {}

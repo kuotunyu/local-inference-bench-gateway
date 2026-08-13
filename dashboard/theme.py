@@ -81,7 +81,10 @@ div[data-testid="stHorizontalBlock"] { gap:.65rem; }
 div[role="radiogroup"] { gap:.38rem; padding:0; border:0; border-radius:0; background:transparent; }
 div[role="radiogroup"] label { padding:.45rem .72rem; border-bottom:2px solid transparent; border-radius:0; }
 div[role="radiogroup"] label:has(input:checked) { border-bottom-color:var(--healthy); background:rgba(113,139,122,.10); }
-[data-testid="stDataFrame"] { border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+[data-testid="stDataFrame"] { border:0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); border-radius:0; box-shadow:none; overflow:hidden; }
+[data-testid="stDataFrameResizable"] { border:0 !important; border-radius:0 !important; }
+[data-testid="stDataFrameGlideDataEditor"] { --gdg-header-font-style:600 15px !important; --gdg-base-font-style:400 15px !important; --gdg-cell-horizontal-padding:10px !important; --gdg-cell-vertical-padding:5px !important; }
+.provenance-detail-gap { height:.65rem; }
 [data-testid="stMarkdownContainer"]:has(.chart-measure-key) { margin-bottom:-.15rem; }
 .chart-measure-key { display:grid; grid-template-columns:repeat(var(--chart-key-columns),minmax(0,1fr)); align-items:center; gap:1rem; margin:.05rem 0 0; padding:0 .1rem; font-size:17px; font-weight:780; line-height:1.35; }
 .chart-key-count-1 { --chart-key-columns:1; }

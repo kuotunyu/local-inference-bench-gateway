@@ -16,6 +16,49 @@ from dashboard.metrics import compute_overview, with_error_categories
 from dashboard.models import TelemetrySnapshot
 
 REQUEST_TABLE_HEIGHT = 540
+REQUEST_TABLE_ROW_HEIGHT = 42
+REQUEST_TABLE_COLUMNS = [
+    "timestamp",
+    "alias",
+    "backend_name",
+    "model",
+    "status_code",
+    "success",
+    "Latency",
+    "TTFT",
+    "prompt_tokens",
+    "completion_tokens",
+    "stream",
+    "error_category",
+]
+
+
+def request_table_column_config() -> dict[str, dict[str, object]]:
+    """Return a centered, zh-TW-first display contract for Request telemetry."""
+    return {
+        "timestamp": st.column_config.DatetimeColumn(
+            "時間（UTC+8）",
+            width=205,
+            alignment="center",
+            format="YYYY-MM-DD HH:mm:ss",
+            timezone="Asia/Taipei",
+        ),
+        "alias": st.column_config.TextColumn("Alias", width=82, alignment="center"),
+        "backend_name": st.column_config.TextColumn("Backend", width=125, alignment="center"),
+        "model": st.column_config.TextColumn("Model", width=145, alignment="center"),
+        "status_code": st.column_config.TextColumn("HTTP", width=82, alignment="center"),
+        "success": st.column_config.CheckboxColumn("成功", width=72, alignment="center"),
+        "Latency": st.column_config.TextColumn("Latency", width=95, alignment="center"),
+        "TTFT": st.column_config.TextColumn("TTFT", width=90, alignment="center"),
+        "prompt_tokens": st.column_config.TextColumn(
+            "Prompt tokens", width=120, alignment="center"
+        ),
+        "completion_tokens": st.column_config.TextColumn(
+            "Completion tokens", width=145, alignment="center"
+        ),
+        "stream": st.column_config.CheckboxColumn("Streaming", width=95, alignment="center"),
+        "error_category": st.column_config.TextColumn("Error 分類", width=130, alignment="center"),
+    }
 
 
 def build_request_table(requests: pd.DataFrame) -> pd.DataFrame:
@@ -33,6 +76,17 @@ def build_request_table(requests: pd.DataFrame) -> pd.DataFrame:
         errors="coerce",
     )
     table["Latency"] = latency.map(lambda value: "—" if pd.isna(value) else f"{value:,.0f} ms")
+    for column in ("alias", "backend_name", "model", "error_category"):
+        if column in table:
+            table[column] = table[column].astype("string").fillna("—")
+    for column in ("status_code", "prompt_tokens", "completion_tokens"):
+        if column in table:
+            numeric = pd.to_numeric(table[column], errors="coerce")
+            table[column] = numeric.map(lambda value: "—" if pd.isna(value) else f"{value:,.0f}")
+    for column in ("success", "stream"):
+        if column in table:
+            numeric = pd.to_numeric(table[column], errors="coerce")
+            table[column] = numeric.map({1: True, 0: False}).astype("boolean")
     return table
 
 
@@ -146,25 +200,13 @@ def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
         render_state_message("沒有符合條件的 Request", "篩選器已保留；放寬任一條件即可繼續探索。")
         return
     table = build_request_table(filtered)
-    visible = [
-        "timestamp",
-        "alias",
-        "backend_name",
-        "model",
-        "status_code",
-        "success",
-        "Latency",
-        "TTFT",
-        "prompt_tokens",
-        "completion_tokens",
-        "stream",
-        "error_category",
-    ]
     st.dataframe(
-        table[visible],
+        table.loc[:, REQUEST_TABLE_COLUMNS],
         hide_index=True,
         width="stretch",
         height=REQUEST_TABLE_HEIGHT,
-        row_height=36,
+        row_height=REQUEST_TABLE_ROW_HEIGHT,
+        column_order=REQUEST_TABLE_COLUMNS,
+        column_config=request_table_column_config(),
     )
     st.caption("— 代表 Upstream 未提供或該 Request 不適用；並不代表 0 ms 或 0 tokens。")

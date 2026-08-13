@@ -45,7 +45,15 @@ def test_theme_uses_flat_instrument_surfaces() -> None:
     assert 'div[role="radiogroup"]' in css
     assert "border:0" in css
     assert '[data-testid="stDataFrame"]' in css
-    assert "border-radius:4px" in css
+    dataframe_rule = re.search(r'\[data-testid="stDataFrame"\] \{([^}]*)\}', css)
+    assert dataframe_rule is not None
+    assert "border-radius:0" in dataframe_rule.group(1)
+    assert "box-shadow:none" in dataframe_rule.group(1)
+    assert '[data-testid="stDataFrameResizable"]' in css
+    assert '[data-testid="stDataFrameGlideDataEditor"]' in css
+    assert "--gdg-header-font-style:600 15px" in css
+    assert "--gdg-base-font-style:400 15px" in css
+    assert ".provenance-detail-gap { height:.65rem; }" in css
     assert '[data-testid="stExpander"]' in css
     assert ".stButton button" in css
     assert "border-radius:6px" in css
