@@ -81,6 +81,7 @@ div[role="radiogroup"] label:has(input:checked) { background:#DDE5DF; }
 *:focus-visible { outline:3px solid rgba(120,144,154,.52) !important; outline-offset:2px; }
 @media (max-width: 760px) {
   html { font-size: 16px; }
+  p, label, [data-testid="stMarkdownContainer"] { font-size:16px; line-height:1.5; }
   .block-container { padding: 1rem .9rem 2.25rem; }
   .ops-title, h1 { font-size:clamp(1.75rem, 7.4vw, 1.9rem) !important; }
   .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.5rem; }
