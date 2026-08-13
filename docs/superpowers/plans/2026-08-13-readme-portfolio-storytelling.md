@@ -76,7 +76,7 @@ Expected: FAIL because `docs/assets/operations-console-overview.png` does not ex
 Run:
 
 ```powershell
-uv run python C:/Users/3Hml/.codex/skills/webapp-testing/scripts/with_server.py --help
+uv run python $env:USERPROFILE/.codex/skills/webapp-testing/scripts/with_server.py --help
 ```
 
 Use the documented argument order. Start the app with:
@@ -379,7 +379,7 @@ git commit -m "docs: rebuild portfolio README"
 Run:
 
 ```powershell
-uv run python C:/Users/3Hml/.agents/skills/design-doc-mermaid/scripts/extract_mermaid.py --help
+uv run python $env:USERPROFILE/.agents/skills/design-doc-mermaid/scripts/extract_mermaid.py --help
 ```
 
 Then extract all README Mermaid blocks into a fresh temporary directory outside the repository. Confirm exactly three `.mmd` files exist.
@@ -389,7 +389,7 @@ Use:
 ```powershell
 $renderDir = Join-Path ([System.IO.Path]::GetTempPath()) ("local-inference-readme-mermaid-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $renderDir | Out-Null
-uv run python C:/Users/3Hml/.agents/skills/design-doc-mermaid/scripts/extract_mermaid.py README.md --output-dir $renderDir --prefix readme
+uv run python $env:USERPROFILE/.agents/skills/design-doc-mermaid/scripts/extract_mermaid.py README.md --output-dir $renderDir --prefix readme
 if ((Get-ChildItem -LiteralPath $renderDir -Filter '*.mmd').Count -ne 3) { throw 'expected exactly three Mermaid diagrams' }
 ```
 
