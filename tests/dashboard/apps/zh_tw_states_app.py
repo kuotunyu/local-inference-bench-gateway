@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -55,3 +56,6 @@ elif state == "requests_filterable":
     render_requests(snapshot, "live")
 elif state == "evidence_missing":
     render_evidence(load_benchmark_evidence(Path(os.environ["DASHBOARD_TEST_RESULTS_DIR"])))
+elif state == "evidence_partial":
+    evidence = load_benchmark_evidence(Path("bench/results"))
+    render_evidence(replace(evidence, prefill=pd.DataFrame()))

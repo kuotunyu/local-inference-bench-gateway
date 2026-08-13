@@ -58,3 +58,17 @@ def test_missing_evidence_uses_zh_tw_warning_heading(tmp_path: Path, monkeypatch
             "P50 TTFT／ms",
         )
     )
+
+
+def test_partial_evidence_renders_only_labels_for_available_charts(monkeypatch) -> None:
+    monkeypatch.setenv("DASHBOARD_TEST_STATE", "evidence_partial")
+    app = AppTest.from_file(str(STATE_APP_PATH)).run(timeout=20)
+
+    visible = _visible_markdown(app)
+    assert not app.exception
+    assert "Throughput／tok/s" in visible
+    assert "TTFT／ms" in visible
+    assert "Latency／ms" in visible
+    assert "VRAM baseline／MiB" in visible
+    assert "P50 TTFT／ms" in visible
+    assert "Median TTFT／s" not in visible

@@ -196,3 +196,7 @@ Leave the verified `8502` preview open on `Benchmark 證據` for continued UI re
   legends remained visible below their respective charts.
 - The Impeccable detector returned no findings for the shared component, theme, Overview, or
   Benchmark Evidence view.
+- Final review restored the Overview swatches to the exact chart mark colors (`#5F7F6B` and
+  `#B56F45`) while neutral Benchmark swatches continue using `currentColor`. Regression coverage
+  now also locks all six mark types, tooltip fields, legends, representative captions, and a
+  partially unavailable Artifact state.

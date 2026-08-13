@@ -136,3 +136,8 @@ def test_benchmark_evidence_uses_zh_tw_first_copy(tmp_path: Path, monkeypatch) -
     ]
     assert not app.exception
     assert all(fragment in visible for fragment in expected)
+    captions = [item.value for item in app.caption]
+    assert any("tokens/sec · 五次測量的 median" in value for value in captions)
+    assert any("series label 標示 percentile" in value for value in captions)
+    assert any("JSON rewrite、Failover bookkeeping" in value for value in captions)
+    assert any("paired controlled observation" in value for value in captions)

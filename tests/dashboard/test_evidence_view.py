@@ -61,6 +61,45 @@ def test_primary_evidence_charts_use_expanded_readable_canvases() -> None:
     assert throughput["encoding"]["y"]["scale"]["zero"] is True
     assert ttft["encoding"]["y"]["scale"]["zero"] is True
     assert kv["encoding"]["y"]["scale"]["zero"] is True
+    for chart in (throughput, ttft, kv):
+        assert chart["mark"]["type"] == "line"
+        assert chart["mark"]["strokeWidth"] == 2.75
+        assert chart["mark"]["point"]["size"] == 68
+        assert chart["encoding"]["color"]["legend"]["orient"] == "bottom"
+    for chart in (prefill, gateway, vram):
+        assert chart["mark"]["type"] == "bar"
+        assert chart["mark"]["cornerRadiusEnd"] == 5
+        assert chart["encoding"]["color"]["legend"]["orient"] == "bottom"
+    assert [item["field"] for item in throughput["encoding"]["tooltip"]] == [
+        "engine",
+        "concurrency",
+        "median_aggregate_tok_s",
+    ]
+    assert [item["field"] for item in ttft["encoding"]["tooltip"]] == [
+        "engine",
+        "percentile",
+        "concurrency",
+        "ttft_ms",
+    ]
+    assert [item["field"] for item in prefill["encoding"]["tooltip"]] == [
+        "engine",
+        "prompt_target_tokens",
+        "median_ttft_s",
+    ]
+    assert [item["field"] for item in gateway["encoding"]["tooltip"]] == [
+        "path",
+        "metric",
+        "milliseconds",
+    ]
+    assert [item["field"] for item in vram["encoding"]["tooltip"]] == [
+        "engine",
+        "median_vram_baseline_mb",
+    ]
+    assert [item["field"] for item in kv["encoding"]["tooltip"]] == [
+        "setting",
+        "concurrency",
+        "ttft_ms",
+    ]
 
 
 def test_missing_evidence_artifacts_degrade_without_exception(tmp_path: Path) -> None:

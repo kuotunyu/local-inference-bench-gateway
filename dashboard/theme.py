@@ -94,6 +94,9 @@ div[role="radiogroup"] label:has(input:checked) { border-bottom-color:var(--heal
 .chart-key-bar { flex:0 0 auto; width:1.05rem; height:.68rem; background:currentColor; }
 .chart-key-line { position:relative; flex:0 0 auto; width:1.5rem; height:0; border-top:4px solid currentColor; }
 .chart-key-line::after { content:""; position:absolute; top:-.34rem; left:.55rem; width:.48rem; height:.48rem; border-radius:50%; background:currentColor; }
+.chart-key-item.request .chart-key-bar { background:#5F7F6B; }
+.chart-key-item.latency .chart-key-line { border-top-color:#B56F45; }
+.chart-key-item.latency .chart-key-line::after { background:#B56F45; }
 [data-testid="stVegaLiteChart"] { margin:.1rem 0 .35rem; }
 [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { font-size:17px !important; line-height:1.45 !important; }
 [data-testid="stExpander"] { border-color:var(--border); border-radius:4px; background:rgba(255,253,249,.66); }

@@ -64,6 +64,9 @@ def test_theme_uses_flat_instrument_surfaces() -> None:
     assert "border-radius" not in key_rule.group(1)
     assert "min-width:0" in item_rule.group(1)
     assert ".chart-measure-key { gap:.65rem; font-size:15px; }" in css
+    assert ".chart-key-item.request .chart-key-bar { background:#5F7F6B; }" in css
+    assert ".chart-key-item.latency .chart-key-line { border-top-color:#B56F45; }" in css
+    assert ".chart-key-item.latency .chart-key-line::after { background:#B56F45; }" in css
 
 
 def test_metric_formatter_never_turns_missing_into_zero() -> None:
