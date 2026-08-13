@@ -101,7 +101,7 @@ def test_readme_diagrams_preserve_semantic_groups_and_rendering_contracts():
         "OpenAI SDK／HTTP Client",
         "Async Benchmark Client",
         "FastAPI Gateway · Alias Routing／Capacity／Failover",
-        "外部 Backend engines · llama.cpp／Ollama／LM Studio",
+        "外部 Backend engines · llama.cpp／Ollama／LM&nbsp;Studio",
         "SQLite Telemetry",
         "Operations Console",
         "Aggregate artifacts",
@@ -157,7 +157,7 @@ def test_readme_diagrams_preserve_semantic_groups_and_rendering_contracts():
     for label in (
         "合成校準 prompts／workload matrix",
         "random 8-character nonce",
-        "warmup 3 次 · 計時 5 次",
+        "warmup×3 · 計時×5",
         "每次僅一個受測 engine 常駐 GPU",
         "request-level raw runs · 未公開",
         "aggregate CSV／controlled JSON／derived charts",

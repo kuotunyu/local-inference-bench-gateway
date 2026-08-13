@@ -34,7 +34,7 @@ flowchart TB
     subgraph Execution["執行邊界"]
         direction LR
         Gateway["FastAPI Gateway · Alias Routing／Capacity／Failover"]
-        Engines["外部 Backend engines · llama.cpp／Ollama／LM Studio"]
+        Engines["外部 Backend engines · llama.cpp／Ollama／LM&nbsp;Studio"]
     end
 
     subgraph Observability["執行期可觀測性"]
@@ -123,7 +123,7 @@ flowchart TB
 
     subgraph Measurement["2 · 量測"]
         direction LR
-        Client["Async Benchmark Client · warmup 3 次 · 計時 5 次"]
+        Client["Async Benchmark Client · warmup×3 · 計時×5"]
         Resident["每次僅一個受測 engine 常駐 GPU"]
         Client --> Resident
     end
