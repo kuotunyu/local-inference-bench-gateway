@@ -15,6 +15,16 @@ def escape_html(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
+def brand_block_html() -> str:
+    """Return the compact two-line identity used beside dashboard controls."""
+    return (
+        '<div class="brand-block">'
+        '<div class="brand-title">Operations Console</div>'
+        '<div class="brand-subtitle">Local inference gateway</div>'
+        "</div>"
+    )
+
+
 def format_metric(value: float | int | None, suffix: str = "", *, digits: int = 1) -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "—"
@@ -69,8 +79,10 @@ def render_state_message(title: str, copy: str, tone: str = "neutral") -> None:
 def page_heading_html(kicker: str, title: str, lede: str) -> str:
     del kicker
     return (
+        '<div class="ops-heading">'
         f'<div class="ops-title">{escape_html(title)}</div>'
-        f'<div class="ops-lede">{escape_html(lede)}</div><div class="ops-rule"></div>'
+        f'<div class="ops-lede">{escape_html(lede)}</div>'
+        '</div><div class="ops-rule"></div>'
     )
 
 
