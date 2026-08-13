@@ -287,3 +287,7 @@ Expected: the worktree is clean and the branch preview remains available for fur
 - Schema fields, aliases, Backend and model names, filenames, routes, environment variables,
   `P50`, `P95`, `TTFT`, `VRAM`, `concurrency`, `Artifact`, `provenance`, and `digest`
   remain in original form by design.
+- Final copy review aligned `Routing 原則`, `Backend Health`, `Request`, `Failover`, and
+  `證據驗證警告` across normal and degraded states. Four state-specific AppTests were added;
+  final verification passed with 77 dashboard tests and 165 full repository tests. The 734 px
+  handoff viewport rendered all four views without horizontal overflow or Streamlit exceptions.
