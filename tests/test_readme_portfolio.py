@@ -120,18 +120,28 @@ def test_readme_diagrams_preserve_semantic_groups_and_rendering_contracts():
         assert f"participant {participant}" in failover_lifecycle
     for removed_participant in ("Telemetry", "Limiter"):
         assert f"participant {removed_participant}" not in failover_lifecycle
-    for lifecycle_boundary in (
-        "容量已滿 · 不排隊",
-        "HTTP 429 + Retry-After",
-        "成功或 4xx · 不 Failover",
-        "connection／timeout／protocol／non-final 5xx",
-        "記錄去敏 Failover event",
-        "嘗試 Fallback Backend",
-        "Streaming：持有 slot 至結束／失敗／取消",
-        "記錄 metadata-only request telemetry",
-        "finally 釋放 slot",
-    ):
-        assert lifecycle_boundary in failover_lifecycle
+    expected_lifecycle = """\
+    Client->>Gateway: POST /v1/chat/completions · Alias
+    Gateway->>Gateway: auth · Alias validation · acquire slot
+    alt 容量已滿 · 不排隊
+        Gateway-->>Client: HTTP 429 + Retry-After
+    else 已取得 slot
+        Gateway->>Primary: 解析 Alias · 嘗試 Primary
+        alt Primary 成功或 4xx
+            Primary-->>Gateway: 成功或 4xx · 不 Failover
+        else 可重試的 upstream failure
+            Primary--xGateway: connection／timeout／protocol／non-final 5xx
+            Gateway->>Gateway: 記錄去敏 Failover event
+            Gateway->>Fallback: 嘗試 Fallback Backend
+            Fallback-->>Gateway: response
+        end
+        Gateway-->>Client: JSON response／Streaming SSE
+        Note over Gateway,Primary: Streaming：持有 slot 至結束／失敗／取消
+        Gateway->>Gateway: 記錄 metadata-only request telemetry
+        Gateway->>Gateway: finally 釋放 slot
+    end
+"""
+    assert expected_lifecycle in failover_lifecycle
     assert '"fontSize": "20px"' in failover_lifecycle
     assert "<br" not in failover_lifecycle
 
@@ -157,6 +167,7 @@ def test_readme_diagrams_preserve_semantic_groups_and_rendering_contracts():
         "release checks",
     ):
         assert label in evidence_pipeline
+    assert 'Raw -->|"僅發布 aggregate"| Aggregate' in evidence_pipeline
     assert "-. 未發布 .->" in evidence_pipeline
     _assert_high_contrast_class_defs(
         evidence_pipeline,

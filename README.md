@@ -84,21 +84,21 @@ sequenceDiagram
     participant Primary as Primary Backend
     participant Fallback as Fallback Backend
 
-    Client->>Gateway: POST /v1/chat/completions 以 Alias
+    Client->>Gateway: POST /v1/chat/completions · Alias
     Gateway->>Gateway: auth · Alias validation · acquire slot
     alt 容量已滿 · 不排隊
         Gateway-->>Client: HTTP 429 + Retry-After
-    else 成功取得 slot
+    else 已取得 slot
         Gateway->>Primary: 解析 Alias · 嘗試 Primary
-        alt 成功或 4xx · 不 Failover
+        alt Primary 成功或 4xx
             Primary-->>Gateway: 成功或 4xx · 不 Failover
-        else 可重試 upstream failure
+        else 可重試的 upstream failure
             Primary--xGateway: connection／timeout／protocol／non-final 5xx
             Gateway->>Gateway: 記錄去敏 Failover event
             Gateway->>Fallback: 嘗試 Fallback Backend
             Fallback-->>Gateway: response
         end
-        Gateway-->>Client: JSON response／streaming SSE
+        Gateway-->>Client: JSON response／Streaming SSE
         Note over Gateway,Primary: Streaming：持有 slot 至結束／失敗／取消
         Gateway->>Gateway: 記錄 metadata-only request telemetry
         Gateway->>Gateway: finally 釋放 slot
@@ -133,7 +133,7 @@ flowchart TB
         Raw["request-level raw runs · 未公開"]
         Aggregate["aggregate CSV／controlled JSON／derived charts"]
         Private["不在公開 repository 中"]
-        Raw -->|"僅發佈 aggregate"| Aggregate
+        Raw -->|"僅發布 aggregate"| Aggregate
         Raw -. 未發布 .-> Private
     end
 
