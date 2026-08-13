@@ -80,8 +80,8 @@ def render_reliability(
     model = build_reliability_model(snapshot, status, registry)
     render_page_heading(
         "ROUTING & RELIABILITY",
-        "不是漂亮圖表，是可追溯的行為。",
-        "把 Alias routing、request-time failover、Backend Health 與 Backpressure 放回同一條因果鏈。",
+        "路由與可靠性分析",
+        "對照 Alias routing、request-time failover、Backend Health 與 Backpressure，檢視路由決策及其失效處理。",
     )
     note = "SQLite telemetry + models.yaml"
     if source_kind == "demo":

@@ -152,8 +152,8 @@ def render_overview(
     model = build_overview_model(snapshot, source_kind, observation_window_minutes)
     render_page_heading(
         "GATEWAY OVERVIEW",
-        "推論系統，一眼掌握。",
-        "從 request、latency、routing 到 failover，把單機 inference gateway 的運行證據放在同一個視野。",
+        "推論閘道運行概覽",
+        "彙整 request throughput、latency、routing、failover 與 Backend Health，呈現所選 observation window 的可追溯運行狀態。",
     )
     source_note = _time_note(model)
     if source_kind == "demo":

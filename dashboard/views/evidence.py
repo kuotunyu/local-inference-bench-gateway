@@ -176,8 +176,8 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
     model = build_evidence_view_model(evidence)
     render_page_heading(
         "BENCHMARK EVIDENCE",
-        "快，不夠。還要知道為什麼可信。",
-        "聚合結果、控制條件、測量環境與 provenance 同頁呈現，讓每個 performance claim 都有邊界。",
+        "Benchmark 測量證據",
+        "並列聚合結果、控制條件、測量環境與 provenance，界定 performance measurement 的適用範圍。",
     )
     verified = (
         "all published artifact digests verified"

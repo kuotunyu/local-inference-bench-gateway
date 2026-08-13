@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from dashboard.components import render_state_message  # noqa: E402
+from dashboard.components import brand_block_html, render_state_message  # noqa: E402
 from dashboard.data.benchmark_repository import load_benchmark_evidence  # noqa: E402
 from dashboard.data.demo_fixture import select_default_mode  # noqa: E402
 from dashboard.data.live_status import GatewayStatus, fetch_gateway_status  # noqa: E402
@@ -61,30 +61,26 @@ def _demo_status() -> GatewayStatus:
 
 
 def _header_controls(live_path: Path) -> tuple[str, str, int | None]:
-    brand, controls = st.columns([1.1, 2.9], vertical_alignment="bottom")
+    brand, source_col, window_col, refresh_col = st.columns(
+        [1.2, 0.85, 0.85, 0.42], vertical_alignment="bottom"
+    )
     with brand:
-        st.markdown(
-            '<div style="font-weight:820;font-size:1.08rem;margin-bottom:.18rem">'
-            "Operations Console</div>",
-            unsafe_allow_html=True,
+        st.markdown(brand_block_html(), unsafe_allow_html=True)
+    default = select_default_mode(live_path)
+    with source_col:
+        mode_label = st.selectbox(
+            "Telemetry source",
+            ["Demo Mode", "Live Mode"],
+            index=1 if default == "live" else 0,
+            key="telemetry_source",
         )
-    with controls:
-        source_col, window_col, refresh_col = st.columns([1, 1, 0.45], vertical_alignment="bottom")
-        default = select_default_mode(live_path)
-        with source_col:
-            mode_label = st.selectbox(
-                "Telemetry source",
-                ["Demo Mode", "Live Mode"],
-                index=1 if default == "live" else 0,
-                key="telemetry_source",
-            )
-        with window_col:
-            window_label = st.selectbox(
-                "Observation window", list(WINDOWS), index=1, key="observation_window"
-            )
-        with refresh_col:
-            st.button("重新整理", width="stretch", help="重新讀取 telemetry 與 current health")
-    st.markdown('<div class="ops-rule" style="margin:.8rem 0"></div>', unsafe_allow_html=True)
+    with window_col:
+        window_label = st.selectbox(
+            "Observation window", list(WINDOWS), index=1, key="observation_window"
+        )
+    with refresh_col:
+        st.button("重新整理", width="stretch", help="重新讀取 telemetry 與 current health")
+    st.markdown('<div class="ops-rule" style="margin:.55rem 0"></div>', unsafe_allow_html=True)
     page = st.radio("View", PAGES, horizontal=True, label_visibility="collapsed")
     return ("live" if mode_label == "Live Mode" else "demo"), page, WINDOWS[window_label]
 

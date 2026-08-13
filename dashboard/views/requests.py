@@ -99,8 +99,8 @@ def _filter_controls(requests: pd.DataFrame) -> pd.DataFrame:
 def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
     render_page_heading(
         "REQUEST EXPLORER",
-        "每一筆請求，都能回到證據。",
-        "用 Alias、Backend、Outcome 與 Error category 收斂問題；空值保留為空值，不用 0 製造假精確。",
+        "請求遙測檢視",
+        "依 Alias、Backend、Outcome 與 Error category 篩選 request telemetry；缺失值維持未知，不以 0 取代。",
     )
     render_source_badge(
         source_kind,
