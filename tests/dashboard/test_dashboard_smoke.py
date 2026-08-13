@@ -93,3 +93,20 @@ def test_operational_views_use_zh_tw_first_copy(
     visible += "".join(item.label for item in app.metric)
     assert not app.exception
     assert all(fragment in visible for fragment in expected)
+
+
+def test_benchmark_evidence_uses_zh_tw_first_copy(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GATEWAY_DB_PATH", str(tmp_path / "missing-live.db"))
+    app = AppTest.from_file(str(APP_PATH)).run(timeout=20)
+    app.radio[0].set_value("Benchmark 證據").run(timeout=20)
+
+    visible = "".join(item.value for item in app.markdown)
+    expected = [
+        "C16 最高 THROUGHPUT",
+        "GATEWAY 額外成本",
+        "測量日期",
+        "PUBLIC RAW RUNS",
+        "測量方法與 provenance",
+    ]
+    assert not app.exception
+    assert all(fragment in visible for fragment in expected)

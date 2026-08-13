@@ -109,7 +109,7 @@ def build_prefill_chart(prefill: pd.DataFrame) -> alt.Chart:
         y="median_ttft_s:Q",
         color="engine:N",
         height=350,
-        x_title="Engine · target tokens",
+        x_title="Engine · 目標 tokens",
         y_title="Median TTFT / s",
         tooltip=["engine:N", "prompt_target_tokens:Q", "median_ttft_s:Q"],
         color_range=["#718B7A", "#78909A", "#B1815F"],
@@ -121,7 +121,7 @@ def build_gateway_cost_chart(overhead: dict) -> alt.Chart:
     via = overhead.get("via_gateway", {})
     frame = pd.DataFrame(
         {
-            "path": ["Direct", "Via Gateway"],
+            "path": ["Direct", "經 Gateway"],
             "Median TTFT": [direct.get("ttft_median_ms"), via.get("ttft_median_ms")],
             "P95 TTFT": [direct.get("ttft_p95_ms"), via.get("ttft_p95_ms")],
             "Median total": [direct.get("total_median_ms"), via.get("total_median_ms")],
@@ -177,17 +177,17 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
     render_page_heading(
         "BENCHMARK EVIDENCE",
         "Benchmark 測量證據",
-        "並列聚合結果、控制條件、測量環境與 provenance，界定 performance measurement 的適用範圍。",
+        "並列 aggregate 結果、控制條件、測量環境與 provenance，界定 performance measurement 的適用範圍。",
     )
     verified = (
-        "all published artifact digests verified"
+        "已驗證所有已發布 Artifact 的 digest"
         if not evidence.warnings
-        else (f"{len(evidence.warnings)} artifact warning(s)")
+        else (f"{len(evidence.warnings)} 個 Artifact 警告")
     )
-    render_source_badge("evidence", f"Committed aggregate artifacts · {verified}")
+    render_source_badge("evidence", f"已提交的 aggregate Artifact · {verified}")
     if evidence.warnings:
         render_state_message(
-            "Evidence verification warning",
+            "Evidence 驗證警告",
             "、".join(f"{path}: {reason}" for path, reason in evidence.warnings.items()),
             "warning",
         )
@@ -213,67 +213,61 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
     top = c16.iloc[0] if not c16.empty else None
     cards = [
         (
-            "TOP C16 THROUGHPUT",
+            "C16 最高 THROUGHPUT",
             "—"
             if top is None
             else format_metric(top["median_aggregate_tok_s"], " tok/s", digits=0),
             "—" if top is None else _engine_label(str(top["engine"])),
         ),
         (
-            "GATEWAY OVERHEAD",
+            "GATEWAY 額外成本",
             format_metric(evidence.overhead.get("overhead_ms"), " ms", digits=2),
-            "median TTFT · direct vs gateway",
+            "Median TTFT · Direct 與 Gateway",
         ),
-        ("MEASURED ON", model.measurement_date, model.gpu),
+        ("測量日期", model.measurement_date, model.gpu),
         (
             "PUBLIC RAW RUNS",
-            "—" if model.public_raw_runs is None else ("Yes" if model.public_raw_runs else "No"),
-            "manifest unavailable" if model.public_raw_runs is None else "aggregate evidence only",
+            "—" if model.public_raw_runs is None else ("是" if model.public_raw_runs else "否"),
+            "manifest 無法使用" if model.public_raw_runs is None else "僅提供 aggregate evidence",
         ),
     ]
     render_metric_grid(cards)
 
-    st.markdown("### Aggregate decode throughput")
+    st.markdown("### Aggregate decode throughput 比較")
     if not concurrency_ok:
-        render_state_message(
-            "Artifact unavailable", "concurrency_summary.csv 無法讀取。", "warning"
-        )
+        render_state_message("Artifact 無法使用", "concurrency_summary.csv 無法讀取。", "warning")
     else:
         st.altair_chart(build_throughput_chart(evidence.concurrency), width="stretch")
-        st.caption("tokens/sec · five-run median · higher is better")
+        st.caption("tokens/sec · 五次測量的 median · 數值越高越好")
 
-    st.markdown("### P50 / P95 TTFT by concurrency")
+    st.markdown("### 依 concurrency 比較 P50 / P95 TTFT")
     if concurrency_ok:
         st.altair_chart(build_ttft_chart(evidence.concurrency), width="stretch")
-        st.caption("milliseconds · series labels identify percentile · lower is better")
+        st.caption("milliseconds · series label 標示 percentile · 數值越低越好")
 
     prefill_col, overhead_col = st.columns([1.2, 1], gap="large")
     with prefill_col:
-        st.markdown("### Prefill · calibrated prompt")
+        st.markdown("### Prefill · 校準後 prompt")
         prefill_ok = _has_columns(
             evidence.prefill, {"engine", "prompt_target_tokens", "median_ttft_s"}
         )
         if prefill_ok:
             st.altair_chart(build_prefill_chart(evidence.prefill), width="stretch")
-            st.caption("median TTFT in seconds · calibrated 1,970 and 7,880 actual-token inputs")
+            st.caption("Median TTFT（秒）· 校準為實際 1,970 與 7,880 tokens 的輸入")
         else:
-            render_state_message(
-                "Artifact unavailable", "prefill_summary.csv 無法讀取。", "warning"
-            )
+            render_state_message("Artifact 無法使用", "prefill_summary.csv 無法讀取。", "warning")
     with overhead_col:
-        st.markdown("### Gateway cost")
+        st.markdown("### Gateway 成本")
         overhead = evidence.overhead
         direct = overhead.get("direct", {})
         via = overhead.get("via_gateway", {})
         if isinstance(direct, dict) and isinstance(via, dict) and direct and via:
             st.altair_chart(build_gateway_cost_chart(overhead), width="stretch")
             st.caption(
-                "milliseconds · JSON rewrite、failover bookkeeping 與 SSE pass-through 的量測成本"
+                "milliseconds · JSON rewrite、Failover bookkeeping 與 SSE pass-through 的量測成本"
             )
         else:
-            render_state_message(
-                "Artifact unavailable", "gateway_overhead.json 無法讀取。", "warning"
-            )
+            render_state_message("Artifact 無法使用", "gateway_overhead.json 無法讀取。", "warning")
 
     vram_col, kv_col = st.columns([1, 1.35], gap="large")
     with vram_col:
@@ -281,10 +275,10 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
         if not c16.empty:
             st.altair_chart(build_vram_chart(c16), width="stretch")
             st.caption(
-                "MiB · measured baseline，並非模型品質或跨硬體效率排名；不同 frontend 的 memory strategy 不同。"
+                "MiB · measured baseline，並非模型品質或跨硬體效率排名；不同 frontend 採用不同 memory strategy。"
             )
     with kv_col:
-        st.markdown("### LM Studio · Unified KV Cache control")
+        st.markdown("### LM Studio · Unified KV Cache 控制")
         if evidence.kv_cache_off and evidence.kv_cache_on:
             off = pd.DataFrame(evidence.kv_cache_off).rename(
                 columns={"ttft_p50_s": "Unified KV Cache OFF"}
@@ -301,23 +295,23 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
                 control[["Unified KV Cache OFF", "Unified KV Cache ON"]] *= 1000
                 st.altair_chart(build_kv_chart(control), width="stretch")
                 st.caption(
-                    "P50 TTFT / ms · paired controlled observation。ON 在部分 concurrency 出現高延遲；內部分配或 scheduling 解釋仍是 hypothesis。"
+                    "P50 TTFT / ms · paired controlled observation。ON 在部分 concurrency 出現高延遲；內部分配或 scheduling 的解釋仍屬 hypothesis。"
                 )
             else:
                 render_state_message(
-                    "Controlled scan unavailable",
-                    "Unified KV Cache paired artifacts schema 無法辨識。",
+                    "Controlled scan 無法使用",
+                    "Unified KV Cache paired Artifact schema 無法辨識。",
                     "warning",
                 )
         else:
             render_state_message(
-                "Controlled scan unavailable",
-                "Unified KV Cache paired artifacts 無法讀取。",
+                "Controlled scan 無法使用",
+                "Unified KV Cache paired Artifact 無法讀取。",
                 "warning",
             )
 
-    st.markdown("### Method & Provenance")
-    render_state_message("Scope", model.scope_note)
+    st.markdown("### 測量方法與 provenance")
+    render_state_message("適用範圍", model.scope_note)
     measurement = evidence.provenance.get("measurement", {})
     if not isinstance(measurement, dict):
         measurement = {}
@@ -330,34 +324,34 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
     left, right = st.columns(2, gap="large")
     with left:
         st.markdown(
-            f"""**Model**
+            f"""**模型**
 `{model.model}`
 
 **GPU**
 {model.gpu}
 
-**Measurement date**
+**測量日期**
 {model.measurement_date}"""
         )
     with right:
         st.markdown(
-            f"""**Method**
-{method.get("warmup_runs", "—")} warmups · {method.get("timed_runs", "—")} timed runs · seed {method.get("seed", "—")}
+            f"""**測量方法**
+{method.get("warmup_runs", "—")} 次 warmup · {method.get("timed_runs", "—")} 次計時測量 · seed {method.get("seed", "—")}
 
-**Engine isolation**
+**Engine 隔離**
 {method.get("engine_isolation", "—")}"""
         )
-        st.markdown(f"**Prefix-cache control**\n\n{method.get('request_nonce', '—')}")
+        st.markdown(f"**Prefix-cache 控制**\n\n{method.get('request_nonce', '—')}")
     artifact_classes: dict[str, int] = {}
     for artifact in evidence.provenance.get("artifacts", []):
         if isinstance(artifact, dict):
             artifact_class = str(artifact.get("class", "unknown"))
             artifact_classes[artifact_class] = artifact_classes.get(artifact_class, 0) + 1
-    with st.expander("Engine versions 與 publication boundary"):
+    with st.expander("Engine 版本與 publication boundary"):
         st.json(engines)
         st.write(
-            "Request-level raw runs 未公開；本頁只使用 committed aggregate summaries、controlled scans、calibrated inputs 與 derived charts。"
+            "Request-level raw runs 未公開；本頁僅使用 committed aggregate summaries、controlled scans、calibrated inputs 與 derived charts。"
         )
-        st.write("Digest policy：" + str(evidence.provenance.get("digest_policy", "unavailable")))
-        st.write(f"Artifact classes：{artifact_classes or 'unavailable'}")
+        st.write("Digest policy：" + str(evidence.provenance.get("digest_policy", "無法使用")))
+        st.write(f"Artifact classes：{artifact_classes or '無法使用'}")
         st.code("EVAL_REPORT.md", language=None)

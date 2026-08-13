@@ -26,6 +26,7 @@ def test_primary_evidence_charts_use_expanded_readable_canvases() -> None:
     prefill = build_prefill_chart(evidence.prefill).to_dict()
 
     assert throughput["height"] == 400
+    assert throughput["encoding"]["x"]["title"] == "Concurrency"
     assert ttft["height"] == 400
     assert prefill["height"] >= 340
     assert throughput["config"]["axis"]["labelFontSize"] >= 14
