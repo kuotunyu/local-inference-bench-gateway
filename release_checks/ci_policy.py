@@ -33,4 +33,17 @@ def verify_ci_policy(repo_root: Path) -> list[str]:
         for step in checkout_steps
     ):
         return ["CI checkout must fetch full Git history for publication audit"]
+    triggers = workflow.get("on", workflow.get(True))
+    pull_request_enabled = (
+        triggers == "pull_request"
+        or isinstance(triggers, list)
+        and "pull_request" in triggers
+        or isinstance(triggers, dict)
+        and "pull_request" in triggers
+    )
+    if pull_request_enabled and any(
+        "github.event.pull_request.head.sha" not in str(step["with"].get("ref", ""))
+        for step in checkout_steps
+    ):
+        return ["CI pull_request checkout must use the pull-request head SHA"]
     return []
