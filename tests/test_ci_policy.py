@@ -57,6 +57,26 @@ jobs:
     assert verify_ci_policy(tmp_path) == []
 
 
+def test_ci_policy_requires_pull_request_checkout_to_use_head_sha(tmp_path) -> None:
+    _write_workflow(
+        tmp_path,
+        """
+on:
+  pull_request:
+jobs:
+  verify:
+    steps:
+      - uses: actions/checkout@pinned
+        with:
+          fetch-depth: 0
+""",
+    )
+
+    violations = verify_ci_policy(tmp_path)
+
+    assert any("pull-request head SHA" in violation for violation in violations), violations
+
+
 def test_ci_policy_reports_malformed_workflow_without_crashing(tmp_path) -> None:
     _write_workflow(tmp_path, "jobs: scalar")
 
