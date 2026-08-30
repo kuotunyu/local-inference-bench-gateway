@@ -47,6 +47,73 @@ def test_import_boundary_rejects_capabilities(tmp_path: Path, source: str, messa
     assert any(message in item for item in verify_public_import_boundary(tmp_path))
 
 
+def test_nested_import_cannot_mask_live_capability_alias(tmp_path: Path) -> None:
+    write_minimal_bundle(
+        tmp_path,
+        "import os as module\n"
+        "def unrelated():\n"
+        "    import json as module\n"
+        "VALUE = module.getenv('KEY')\n",
+    )
+
+    assert verify_public_import_boundary(tmp_path) == ["space/app.py: environment read"]
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        ("from builtins import __import__\n", "dynamic import"),
+        ("from importlib import import_module as loader\n", "dynamic import"),
+        ("from os import getenv\n", "environment read"),
+        ("from os import environ\n", "environment read"),
+    ],
+)
+def test_capability_bearing_import_from_is_rejected(
+    tmp_path: Path, source: str, message: str
+) -> None:
+    write_minimal_bundle(tmp_path, source)
+
+    assert verify_public_import_boundary(tmp_path) == [f"space/app.py: {message}"]
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        (
+            "from pathlib import Path\nVALUE = Path('/etc/passwd').read_text()\n",
+            "arbitrary path read",
+        ),
+        (
+            "import http.client\nVALUE = http.client.HTTPSConnection('example.com')\n",
+            "forbidden import: http.client",
+        ),
+        ("import os\nVALUE = os.system('whoami')\n", "process execution"),
+        ("import _sqlite3\n", "forbidden import: _sqlite3"),
+    ],
+)
+def test_alternate_standard_library_capabilities_are_rejected(
+    tmp_path: Path, source: str, message: str
+) -> None:
+    write_minimal_bundle(tmp_path, source)
+
+    assert verify_public_import_boundary(tmp_path) == [f"space/app.py: {message}"]
+
+
+def test_local_capability_reexport_is_rejected(tmp_path: Path) -> None:
+    write_minimal_bundle(
+        tmp_path,
+        "from dashboard.helper import loader\nVALUE = loader('gateway.app')\n",
+    )
+    write_python(tmp_path, "dashboard/__init__.py", "")
+    write_python(
+        tmp_path,
+        "dashboard/helper.py",
+        "from importlib import import_module as loader\n",
+    )
+
+    assert verify_public_import_boundary(tmp_path) == ["dashboard/helper.py: dynamic import"]
+
+
 def test_import_boundary_rejects_module_path_escape(tmp_path: Path) -> None:
     write_minimal_bundle(tmp_path, "from ..outside import VALUE\n")
 
@@ -62,6 +129,17 @@ def test_import_boundary_rejects_unresolved_local_import(tmp_path: Path) -> None
     violations = verify_public_import_boundary(tmp_path)
 
     assert any("unresolved local import" in item for item in violations)
+
+
+def test_import_boundary_accepts_static_package_export(tmp_path: Path) -> None:
+    write_minimal_bundle(tmp_path, "from dashboard import VALUE\n")
+    write_python(tmp_path, "dashboard/__init__.py", "VALUE = 1\n")
+
+    assert verify_public_import_boundary(tmp_path) == []
+    assert public_import_closure(tmp_path) == (
+        PurePosixPath("dashboard/__init__.py"),
+        PurePosixPath("space/app.py"),
+    )
 
 
 def test_import_boundary_terminates_on_cycle(tmp_path: Path) -> None:
