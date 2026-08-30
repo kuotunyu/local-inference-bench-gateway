@@ -4,6 +4,8 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
+
 from dashboard import components
 from dashboard.data.public_evidence import load_public_evidence
 from dashboard.views import evidence as evidence_view
@@ -99,6 +101,32 @@ def test_tampered_artifact_is_quarantined_without_hard_coded_metric(tmp_path: Pa
     assert state.verified_artifacts == 11
     assert state.evidence.concurrency.empty
     assert state.evidence.overhead["overhead_ms"] > 0
+    assert state.evidence.warnings["concurrency_summary.csv"] == "digest_mismatch"
+
+
+@pytest.mark.parametrize(
+    "manifest_path",
+    [
+        "bench/results//concurrency_summary.csv",
+        "bench/results/./concurrency_summary.csv",
+    ],
+)
+def test_equivalent_manifest_path_cannot_bypass_digest_warning(
+    tmp_path: Path, manifest_path: str
+) -> None:
+    copy_results(RESULTS_DIR, tmp_path)
+    provenance_path = tmp_path / "provenance.json"
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    for artifact in provenance["artifacts"]:
+        if artifact["path"] == "bench/results/concurrency_summary.csv":
+            artifact["path"] = manifest_path
+    provenance_path.write_text(json.dumps(provenance), encoding="utf-8")
+    (tmp_path / "concurrency_summary.csv").write_text("changed", encoding="utf-8")
+
+    state = load_public_evidence(tmp_path)
+
+    assert state.verified_artifacts == 11
+    assert state.complete is False
     assert state.evidence.warnings["concurrency_summary.csv"] == "digest_mismatch"
 
 

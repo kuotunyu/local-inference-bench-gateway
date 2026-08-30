@@ -24,9 +24,16 @@ def _warning_key(artifact: dict[str, Any]) -> str | None:
     path = artifact.get("path")
     if not isinstance(path, str):
         return None
-    normalized = path.replace("\\", "/")
-    prefix = "bench/results/"
-    return normalized[len(prefix) :] if normalized.startswith(prefix) else normalized
+    relative = Path(path.replace("\\", "/"))
+    if (
+        relative.is_absolute()
+        or relative.drive
+        or any(part in {"", ".", ".."} for part in relative.parts)
+    ):
+        return None
+    if len(relative.parts) >= 2 and relative.parts[:2] == ("bench", "results"):
+        relative = Path(*relative.parts[2:])
+    return relative.as_posix() if relative.parts else None
 
 
 def load_public_evidence(results_dir: Path) -> PublicEvidenceState:
