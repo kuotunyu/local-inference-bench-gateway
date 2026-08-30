@@ -73,9 +73,10 @@ before any future remote creation, an authenticated preflight must perform all o
 
 Only a confirmed not-found result under the verified owner identity permits a separately approved
 creation step. This gate must be implemented as a non-mutating command that completes before any
-create or upload call. The check and the later create operation should be adjacent in the
-deployment workflow to minimize time-of-check/time-of-use drift; a create-time conflict still
-stops the workflow without retrying destructively.
+create or upload call. The check and the later create operation must be adjacent in the
+deployment workflow to minimize time-of-check/time-of-use drift. Specifically, the authenticated
+check must execute immediately before the create call, with no unrelated remote mutation between
+them; a create-time conflict still stops the workflow without retrying destructively.
 
 ## 4. Public truth contract
 
@@ -88,8 +89,8 @@ The following claim ceiling appears above the first interactive control on every
 > 不是 live inference service，亦無 SLA。Space 可能休眠或 cold-start；其啟動狀態不代表
 > Gateway uptime。
 
-The wording may be adjusted for line wrapping, but none of these meanings may be weakened. The
-page must continue to state all of the following above the first control:
+The rendered text must be verbatim except for line wrapping. The page must state all of the
+following above the first control:
 
 - deterministic Demo data is illustrative and is not production or sampled traffic;
 - benchmark evidence is a dated, hardware- and version-specific snapshot;
@@ -142,28 +143,30 @@ navigation links. They do not authorize server-side fetching.
 ### 5.2 Deterministic Demo source
 
 The public Demo source is a pure builder that returns a `TelemetrySnapshot`-shaped in-memory
-object and immutable presentation models. It reuses the approved scenario semantics: at least two
-aliases; multiple engine labels; successful streaming and non-streaming requests; nullable TTFT
-and token fields; connection, timeout, upstream 5xx, and HTTP 429 examples; and failover events,
-including an exhausted chain.
+object and immutable presentation models. It reproduces the existing approved fixture exactly:
+60 one-minute request rows beginning at `2026-08-12T16:45:00Z`, aliases `fast` and `smart`, the
+backend labels `llamacpp`, `ollama`, and `ollama-smart`, successful streaming and non-streaming
+requests, nullable TTFT and token fields, connection, timeout, upstream 5xx, and HTTP 429 examples,
+and three failover events including one exhausted chain.
 
-The builder has a fixed timestamp range and fixed rows. Observation windows anchor to the maximum
-fixture timestamp, not the wall clock. Repeated construction must produce equal frames and a stable
-canonical digest. The public path does not create, open, copy, or mutate a `.db`, `.sqlite`, or
-`.sqlite3` file.
+Observation windows anchor to the maximum fixture timestamp, not the wall clock. Repeated
+construction must produce equal frames and a stable SHA-256 over a canonical UTF-8 JSON
+representation containing `schema_version`, request records, and failover records; it excludes any
+machine-specific source path and uses sorted object keys, fixed column order, records sorted by ID,
+and no optional whitespace. The public path does not create, open, copy, or mutate a `.db`,
+`.sqlite`, or `.sqlite3` file.
 
 Demo backend presentation uses stable engine/backend labels, never endpoint URLs. A panel that
-currently describes `Backend Health` must be presented in the Space as `Fixture backend state`
-or an equivalent phrase that cannot be read as a current reachability check. The fixture state is
-part of the scenario, not a probe.
+currently describes `Backend Health` must use the exact Space label `Fixture backend state`. The
+fixture state is part of the scenario, not a probe.
 
-The local Operations Console may retain its existing SQLite-backed Demo and Live behavior. Any
+The local Operations Console must retain its existing SQLite-backed Demo and Live behavior. Any
 shared fixture refactor must preserve that local contract and its tests, while the public adapter
 imports only the pure in-memory builder.
 
 ### 5.3 Presentation contracts
 
-Shared views should depend on small dashboard-owned display contracts rather than runtime types
+Shared views must depend on small dashboard-owned display contracts rather than runtime types
 from `gateway.registry` or `dashboard.data.live_status`. The local Console adapter converts runtime
 objects to those contracts. The public adapter constructs them from fixture constants.
 
@@ -183,8 +186,8 @@ Evidence rendering is fail-closed:
 - a missing or invalid provenance manifest invalidates the verified evidence context;
 - an unsafe, duplicate, missing, or digest-mismatched artifact is quarantined;
 - a panel must not display a canonical metric derived from an unavailable artifact;
-- unaffected panels may remain available only when their required artifacts are independently
-  verified under a valid manifest; and
+- unaffected panels remain available only when their required artifacts are independently verified
+  under a valid manifest; and
 - the UI must never replace a missing value with zero or a stale hard-coded claim.
 
 The committed evidence is copied byte-for-byte into the Space bundle. It is not downloaded from
@@ -225,7 +228,9 @@ checkout from an explicit manifest; it does not mirror the entire GitHub reposit
 
 ### 7.1 Required source-to-bundle allowlist
 
-The export manifest enumerates both source and destination path. At minimum, it includes:
+The export manifest enumerates both source and destination path. It contains the following required
+entries. An additional runtime file is allowed only when it is named individually in the manifest
+and an import-closure test proves that the public entrypoint needs it:
 
 - Space card `README.md` with `sdk: docker` and `app_port: 7860` metadata;
 - a Space-only `Dockerfile`;
@@ -241,9 +246,8 @@ The export manifest enumerates both source and destination path. At minimum, it 
 - a generated deployment manifest recording the exact GitHub source commit, export-manifest
   digest, evidence-manifest digest, and intended canonical Space ID.
 
-The deployment manifest is provenance for the bundle, not benchmark evidence. It may be generated
-at export time, must be committed with the future Space revision, and must not alter evidence
-files.
+The deployment manifest is provenance for the bundle, not benchmark evidence. It is generated at
+export time, must be committed with the future Space revision, and must not alter evidence files.
 
 ### 7.2 Path denylist
 
@@ -288,14 +292,16 @@ SDK. The Space therefore declares `sdk: docker` and `app_port: 7860` and starts 
 
 Runtime requirements:
 
-- fixed Python 3.12 base compatible with the source project;
+- base image `python:3.12.13-slim-bookworm`;
 - CPU-only image with no CUDA, GPU, model-serving, or inference dependencies;
-- non-root runtime user with a stable numeric UID/GID such as `10001:10001`;
+- non-root runtime user `10001:10001`;
 - explicit `COPY` instructions rather than `COPY . .`;
-- minimal directly used packages pinned to exact versions and checked against `uv.lock`;
+- exactly pinned direct runtime packages `streamlit==1.61.1`, `pandas==3.0.5`, and
+  `altair==6.2.2`, with a test that checks all three against `uv.lock`;
 - `gatherUsageStats = false`;
 - no declared Space secrets, variables, model preload, persistent storage, or GPU hardware;
-- no application-owned writes outside ephemeral framework/cache paths; and
+- no filesystem writes by Demo or evidence application code; framework-owned temporary/cache
+  writes are limited to ephemeral container paths; and
 - a container health check that probes only the Streamlit process inside the container.
 
 The self-health probe is hosting process liveness. It must not be displayed as gateway/backend
@@ -403,7 +409,7 @@ bundle verifier that rejects:
 
 ### 11.5 Visual and claim gates
 
-Perform bounded visual review at approximately 1440x900 and 390px widths:
+Perform bounded visual review at exact `1440x900` desktop and `390x844` mobile viewports:
 
 - the claim ceiling is visible before the first control without scrolling;
 - navigation, badges, charts, tooltips, legends, tables, and error states remain readable;
@@ -458,7 +464,19 @@ The design is successfully implemented only when all of the following are true:
 7. Desktop and mobile review preserves the truth contract and scientific-console readability.
 8. Remote collision, Space deployment, and GitHub About remain separate explicit gates.
 
-## 14. Non-goals
+## 14. Implementation-plan scope
+
+This design is one coherent implementation unit: create the public presentation contracts and
+in-memory fixture, add the dedicated entrypoint, define and verify the allowlisted bundle, add the
+Docker runtime assets, and complete local automated and visual verification. These pieces share one
+public-boundary contract and must land together; splitting them would leave either an unverified
+adapter or an undeployable bundle.
+
+Remote name checks that require owner credentials, Space creation/upload, post-deployment review,
+and the GitHub About mutation are release operations outside the implementation plan. The plan may
+document their commands and gates but must not execute them.
+
+## 15. Non-goals
 
 - Hosting the FastAPI gateway or an OpenAI-compatible inference endpoint.
 - Connecting the Space to a visitor's localhost, LAN, VPN, tunnel, database, GPU, or backend.
@@ -473,9 +491,10 @@ The design is successfully implemented only when all of the following are true:
 - Creating or modifying a Space, pushing, opening a PR, merging, changing visibility, or editing
   GitHub About as part of the design-document phase.
 
-## 15. Authoritative references
+## 16. Authoritative references
 
-- Portfolio strategy:
+- Portfolio strategy in the sibling portfolio-control repository, relative to this repository
+  root:
   `../_portfolio_control/docs/superpowers/specs/2026-08-30-github-about-website-strategy-design.md`
 - Repository evidence boundary: `README.md`, `EVAL_REPORT.md`, and
   `bench/results/provenance.json`
