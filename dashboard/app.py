@@ -20,6 +20,7 @@ from dashboard.components import brand_block_html, render_state_message  # noqa:
 from dashboard.data.benchmark_repository import load_benchmark_evidence  # noqa: E402
 from dashboard.data.demo_fixture import select_default_mode  # noqa: E402
 from dashboard.data.live_status import GatewayStatus, fetch_gateway_status  # noqa: E402
+from dashboard.data.operations_adapter import operations_display_from_runtime  # noqa: E402
 from dashboard.state import (  # noqa: E402
     AppTelemetryState,
     load_telemetry_state,
@@ -132,19 +133,26 @@ def main() -> None:
             os.environ.get("GATEWAY_BASE_URL", "http://127.0.0.1:9000"),
             os.environ.get("GATEWAY_API_KEY") or None,
         )
+    operations = operations_display_from_runtime(
+        status, registry, source_kind=telemetry.source_kind
+    )
 
     if page == "系統總覽":
         render_overview(
             snapshot,
             telemetry.source_kind,
-            status,
-            registry,
+            operations,
             observation_window_minutes=minutes,
         )
     elif page == "Routing 與可靠性":
-        render_reliability(snapshot, telemetry.source_kind, status, registry)
+        render_reliability(snapshot, telemetry.source_kind, operations)
     elif page == "Request 紀錄":
-        render_requests(snapshot, telemetry.source_kind)
+        render_requests(
+            snapshot,
+            telemetry.source_kind,
+            source_note="SQLite Request log"
+            + (" · 示範 fixture" if telemetry.source_kind == "demo" else ""),
+        )
     else:
         render_evidence(load_benchmark_evidence(PROJECT_ROOT / "bench/results"))
 

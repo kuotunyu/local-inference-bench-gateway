@@ -150,16 +150,15 @@ def _filter_controls(requests: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def render_requests(snapshot: TelemetrySnapshot, source_kind: str) -> None:
+def render_requests(
+    snapshot: TelemetrySnapshot, source_kind: str, *, source_note: str | None = None
+) -> None:
     render_page_heading(
         "REQUEST EXPLORER",
         "請求遙測檢視",
         "依 Alias、Backend、結果與 Error 分類篩選 Request Telemetry；缺失值維持未知，不以 0 取代。",
     )
-    render_source_badge(
-        source_kind,
-        "SQLite Request log" + (" · 示範 fixture" if source_kind == "demo" else ""),
-    )
+    render_source_badge(source_kind, source_note or "SQLite Request log")
     if snapshot.requests.empty:
         render_state_message(
             "尚無 Request Telemetry",

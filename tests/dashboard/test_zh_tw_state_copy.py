@@ -19,6 +19,26 @@ def test_empty_overview_keeps_request_as_an_original_engineering_term(monkeypatc
     assert "第一筆 Request 寫入後" in _visible_markdown(app)
 
 
+def test_overview_public_demo_uses_fixture_heading(monkeypatch) -> None:
+    """Fails if public fixture rendering is mistaken for a current local probe."""
+    monkeypatch.setenv("DASHBOARD_TEST_STATE", "overview_public_demo")
+    app = AppTest.from_file(str(STATE_APP_PATH)).run(timeout=20)
+
+    visible = _visible_markdown(app)
+    assert not app.exception
+    assert "Fixture backend state" in visible
+    assert "目前觀測" not in visible
+
+
+def test_overview_local_runtime_preserves_observed_heading(monkeypatch) -> None:
+    """Fails if the local runtime loses its current-observation health disclosure."""
+    monkeypatch.setenv("DASHBOARD_TEST_STATE", "overview_empty")
+    app = AppTest.from_file(str(STATE_APP_PATH)).run(timeout=20)
+
+    assert not app.exception
+    assert "Backend Health · 目前觀測" in _visible_markdown(app)
+
+
 def test_reliability_states_use_zh_tw_led_copy(monkeypatch) -> None:
     monkeypatch.setenv("DASHBOARD_TEST_STATE", "reliability_degraded")
     app = AppTest.from_file(str(STATE_APP_PATH)).run(timeout=20)
@@ -27,6 +47,7 @@ def test_reliability_states_use_zh_tw_led_copy(monkeypatch) -> None:
     assert not app.exception
     assert "Routing 原則" in visible
     assert "Backend Health 詳細資訊無法取得" in visible
+    assert "Gateway 可連線，但 Backend detail 未授權或尚未回報。" in visible
     assert "沒有 Failover event" in visible
 
 
