@@ -7,7 +7,7 @@ import json
 import re
 import shutil
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 SPACE_ID = "steven0226/local-inference-bench-gateway"
 SOURCE_REPOSITORY = "kuotunyu/local-inference-bench-gateway"
@@ -35,7 +35,14 @@ def _safe_path(value: object, *, source: bool) -> PurePosixPath:
     if not isinstance(value, str) or not value or "\\" in value:
         raise BundleManifestError(error)
     path = PurePosixPath(value)
-    if path.is_absolute() or ".." in path.parts or path == PurePosixPath("."):
+    windows_path = PureWindowsPath(value)
+    if (
+        path.is_absolute()
+        or windows_path.drive
+        or windows_path.root
+        or ".." in path.parts
+        or path == PurePosixPath(".")
+    ):
         raise BundleManifestError(error)
     return path
 
@@ -89,19 +96,31 @@ def _source_file(repo_root: Path, source: PurePosixPath) -> Path:
     return path
 
 
+def _bundle_path(bundle_root: Path, relative: PurePosixPath) -> Path:
+    root = bundle_root.resolve()
+    target = (root / Path(*relative.parts)).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError as error:
+        raise BundleManifestError("destination escapes bundle") from error
+    return target
+
+
 def export_space_bundle(repo_root: Path, destination: Path, source_commit: str) -> Path:
     """Copy the allowlisted Space bundle and return its deployment manifest."""
     if not _SOURCE_COMMIT.fullmatch(source_commit):
         raise BundleExportError("invalid source commit")
     _ensure_empty_destination(destination)
     entries = load_bundle_manifest(repo_root)
-    sources = [(entry, _source_file(repo_root, entry.source)) for entry in entries]
+    sources = [
+        (entry, _source_file(repo_root, entry.source), _bundle_path(destination, entry.destination))
+        for entry in entries
+    ]
     manifest_source = _source_file(repo_root, _MANIFEST_PATH)
     evidence_source = _source_file(repo_root, _EVIDENCE_MANIFEST_PATH)
 
     destination.mkdir(parents=True, exist_ok=True)
-    for entry, source in sources:
-        target = destination / Path(*entry.destination.parts)
+    for _entry, source, target in sources:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
 

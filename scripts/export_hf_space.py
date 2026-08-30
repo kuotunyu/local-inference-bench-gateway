@@ -28,7 +28,7 @@ def _git(*args: str) -> str:
 
 
 def _clean_head_commit() -> str:
-    if _git("status", "--porcelain"):
+    if _git("status", "--porcelain", "--untracked-files=all"):
         raise BundleExportError("worktree must be clean")
     return _git("rev-parse", "HEAD").strip()
 
