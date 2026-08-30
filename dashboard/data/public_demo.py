@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from dashboard.models import TelemetrySnapshot
+from dashboard.models import BackendDisplay, OperationsDisplay, RouteDisplay, TelemetrySnapshot
 
 REQUEST_COLUMNS = [
     "id",
@@ -95,6 +95,28 @@ def build_demo_snapshot() -> TelemetrySnapshot:
         failovers=pd.DataFrame(failover_rows, columns=FAILOVER_COLUMNS),
         schema_version=1,
         source_path=Path("deterministic-demo"),
+    )
+
+
+def build_demo_operations() -> OperationsDisplay:
+    """Build fixed public-demo presentation data without endpoint probes."""
+    return OperationsDisplay(
+        mode="public-demo",
+        source_note="Deterministic in-memory fixture · 非正式流量 · 無 endpoint probe",
+        overview_lede="檢視固定 Demo scenario 的 Request、latency、routing、Failover 與 fixture backend state。",
+        reliability_lede="檢視固定 Demo scenario 的 Alias Routing、Failover、Backpressure 與錯誤分類。",
+        backend_heading="Fixture backend state",
+        backend_state="fixture",
+        backend_message="固定情境狀態；不是目前 reachability probe。",
+        backends=(
+            BackendDisplay("llamacpp", True, "2026-08-12T17:45:00+00:00"),
+            BackendDisplay("ollama", True, "2026-08-12T17:45:00+00:00"),
+            BackendDisplay("ollama-smart", True, "2026-08-12T17:45:00+00:00"),
+        ),
+        routes=(
+            RouteDisplay("fast", ("llamacpp", "ollama"), ("bench-model", "bench-model-c"), 4),
+            RouteDisplay("smart", ("ollama-smart",), ("qwen3:8b",), None),
+        ),
     )
 
 
