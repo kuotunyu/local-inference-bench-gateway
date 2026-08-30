@@ -34,11 +34,13 @@ def format_metric(value: float | int | None, suffix: str = "", *, digits: int = 
     return f"{value:,.{digits}f}{suffix}"
 
 
-def render_source_badge(kind: str, note: str) -> None:
-    label = {"demo": "DEMO 資料", "live": "LIVE", "evidence": "證據"}.get(kind, kind.upper())
+def render_source_badge(kind: str, note: str, *, label: str | None = None) -> None:
+    display_label = label or {"demo": "DEMO 資料", "live": "LIVE", "evidence": "證據"}.get(
+        kind, kind.upper()
+    )
     st.markdown(
         f'<div class="source-line"><span class="source-badge {escape_html(kind)}">'
-        f'● {escape_html(label)}</span><span class="source-note">{escape_html(note)}</span></div>',
+        f'● {escape_html(display_label)}</span><span class="source-note">{escape_html(note)}</span></div>',
         unsafe_allow_html=True,
     )
 

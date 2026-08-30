@@ -52,6 +52,10 @@ h3 { font-size: 1.24rem !important; margin: 1.05rem 0 .4rem !important; }
 .source-badge.live { background:#DCE7DE; color:#355044; }
 .source-badge.evidence { background:#DDE5E8; color:#405B65; }
 .source-note { color:var(--ink-muted); font-size:19px; }
+.truth-contract { margin:0 0 .9rem; padding:.9rem 1rem; border:1px solid var(--border); border-left:4px solid var(--evidence); background:rgba(255,253,249,.9); }
+.truth-contract-title { margin:0 0 .35rem; color:var(--ink); font-size:1.15rem; font-weight:850; letter-spacing:-.015em; }
+.truth-contract p { margin:.28rem 0; color:var(--ink-muted); font-size:17px; line-height:1.45; }
+.truth-contract .truth-contract-primary { color:var(--ink); font-size:18px; }
 .metric-grid { display:grid; grid-template-columns:repeat(var(--metric-columns),minmax(0,1fr)); gap:0; margin:.1rem 0 .45rem; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
 .metric-count-1 { --metric-columns:1; }
 .metric-count-2 { --metric-columns:2; }
@@ -148,4 +152,4 @@ div[data-baseweb="select"] > div { border-radius:6px; }
 
 
 def apply_theme() -> None:
-    st.markdown(build_theme_css(), unsafe_allow_html=True)
+    st.html(build_theme_css())
