@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -86,6 +89,20 @@ def make_minimal_repo(
     return repo_root
 
 
+def run_git(repo_root: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=repo_root, check=True, capture_output=True)
+
+
+def load_export_script():
+    script_path = Path("scripts/export_hf_space.py").resolve()
+    spec = importlib.util.spec_from_file_location("export_hf_space_test", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_export_is_exact_deterministic_and_refuses_nonempty_destination(tmp_path: Path) -> None:
     first = tmp_path / "first"
     second = tmp_path / "second"
@@ -117,6 +134,30 @@ def test_manifest_rejects_destination_traversal(tmp_path: Path) -> None:
 
     with pytest.raises(BundleManifestError, match="^destination escapes bundle$"):
         load_bundle_manifest(repo_root)
+
+
+@pytest.mark.parametrize(
+    ("field", "unsafe_path", "message"),
+    [
+        ("source", "C:/outside.txt", "source escapes repository"),
+        ("source", r"C:\\outside.txt", "source escapes repository"),
+        ("source", r"\\outside.txt", "source escapes repository"),
+        ("destination", "C:/outside.txt", "destination escapes bundle"),
+        ("destination", r"C:\\outside.txt", "destination escapes bundle"),
+        ("destination", r"\\outside.txt", "destination escapes bundle"),
+    ],
+)
+def test_manifest_rejects_windows_drive_or_anchored_path(
+    tmp_path: Path, field: str, unsafe_path: str, message: str
+) -> None:
+    repo_root = make_minimal_repo(tmp_path)
+    entry = {"source": "payload.txt", "destination": "payload.txt"}
+    entry[field] = unsafe_path
+    write_manifest(repo_root, [entry])
+
+    with pytest.raises(BundleManifestError, match=f"^{message}$"):
+        export_space_bundle(repo_root, tmp_path / "bundle", "a" * 40)
+    assert not (tmp_path / "bundle").exists()
 
 
 def test_manifest_rejects_duplicate_destination(tmp_path: Path) -> None:
@@ -164,3 +205,21 @@ def test_export_manifest_digest_uses_source_bytes(tmp_path: Path) -> None:
     assert lf_deployment["export_manifest_sha256"] == hashlib.sha256(lf_manifest).hexdigest()
     assert crlf_deployment["export_manifest_sha256"] == hashlib.sha256(crlf_manifest).hexdigest()
     assert lf_deployment["export_manifest_sha256"] != crlf_deployment["export_manifest_sha256"]
+
+
+def test_clean_worktree_gate_detects_untracked_file_hidden_by_git_config(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    run_git(repo_root, "init")
+    run_git(repo_root, "config", "user.name", "Exporter test")
+    run_git(repo_root, "config", "user.email", "exporter-test@example.invalid")
+    (repo_root / "tracked.txt").write_text("tracked", encoding="utf-8")
+    run_git(repo_root, "add", "tracked.txt")
+    run_git(repo_root, "commit", "-m", "initial")
+    run_git(repo_root, "config", "status.showUntrackedFiles", "no")
+    (repo_root / "untracked.txt").write_text("untracked", encoding="utf-8")
+    script = load_export_script()
+    script.REPO_ROOT = repo_root
+
+    with pytest.raises(BundleExportError, match="^worktree must be clean$"):
+        script._clean_head_commit()
