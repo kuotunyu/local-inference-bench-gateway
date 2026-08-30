@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
-
-import pandas as pd
 
 from dashboard.data.demo_fixture import ensure_demo_database
 from dashboard.data.sqlite_repository import (
@@ -16,6 +13,7 @@ from dashboard.data.sqlite_repository import (
     load_snapshot,
 )
 from dashboard.models import TelemetrySnapshot
+from dashboard.windows import slice_observation_window  # noqa: F401
 
 
 @dataclass(frozen=True)
@@ -42,27 +40,3 @@ def load_telemetry_state(
                 "修正後再切回 Live 模式，不需刪除或重建現有資料庫。",
             )
     return AppTelemetryState(load_snapshot(ensure_demo_database(demo_directory)), "demo")
-
-
-def slice_observation_window(
-    snapshot: TelemetrySnapshot,
-    minutes: int | None,
-    source_kind: Literal["demo", "live"],
-) -> TelemetrySnapshot:
-    if minutes is None or snapshot.requests.empty:
-        return snapshot
-    request_times = pd.to_datetime(snapshot.requests["timestamp"], utc=True, errors="coerce")
-    if source_kind == "demo" and request_times.notna().any():
-        reference = request_times.max().to_pydatetime()
-    else:
-        reference = datetime.now(timezone.utc)
-    cutoff = reference - timedelta(minutes=minutes)
-    requests = snapshot.requests.loc[request_times >= cutoff].copy()
-    failover_times = pd.to_datetime(snapshot.failovers["timestamp"], utc=True, errors="coerce")
-    failovers = snapshot.failovers.loc[failover_times >= cutoff].copy()
-    return TelemetrySnapshot(
-        requests=requests,
-        failovers=failovers,
-        schema_version=snapshot.schema_version,
-        source_path=snapshot.source_path,
-    )

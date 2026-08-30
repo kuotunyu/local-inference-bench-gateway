@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import pandas as pd
+
 from dashboard.state import load_telemetry_state, slice_observation_window
+from dashboard.windows import slice_observation_window as slice_public_observation_window
 from gateway.db import init_db
 
 
@@ -18,7 +21,11 @@ def test_missing_live_database_falls_back_without_creating_it(tmp_path: Path) ->
 def test_demo_window_anchors_to_fixture_not_wall_clock(tmp_path: Path) -> None:
     state = load_telemetry_state("demo", tmp_path / "live.db", tmp_path / "demo")
     sliced = slice_observation_window(state.snapshot, 15, "demo")
+    public_sliced = slice_public_observation_window(state.snapshot, 15, "demo")
+
     assert 1 <= len(sliced.requests) <= 16
+    pd.testing.assert_frame_equal(sliced.requests, public_sliced.requests)
+    pd.testing.assert_frame_equal(sliced.failovers, public_sliced.failovers)
 
 
 def test_empty_compatible_live_database_remains_live(tmp_path: Path) -> None:
