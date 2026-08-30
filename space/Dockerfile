@@ -16,6 +16,6 @@ RUN groupadd --gid 10001 app && useradd --uid 10001 --gid 10001 --no-create-home
 EXPOSE 7860
 USER 10001:10001
 
-HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=6 CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/_stcore/health', timeout=2).read()"]
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=6 CMD ["python", "-c", "import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:7860/_stcore/health', timeout=2).read()"]
 
 CMD ["streamlit", "run", "space/app.py", "--server.address=0.0.0.0", "--server.port=7860", "--server.headless=true"]
