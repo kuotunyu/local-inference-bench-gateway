@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import json
+import os
 import re
+import subprocess
+import sys
 import tomllib
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 
 SPACE_ROOT = Path("space")
 
@@ -31,6 +37,52 @@ def test_space_assets_pin_public_runtime() -> None:
     assert "http://127.0.0.1:7860/_stcore/health" in dockerfile
 
 
+def test_space_healthcheck_ignores_poisoned_proxy_environment() -> None:
+    dockerfile = (SPACE_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    healthcheck_line = next(
+        line for line in dockerfile.splitlines() if line.startswith("HEALTHCHECK")
+    )
+    healthcheck = json.loads(healthcheck_line.split(" CMD ", maxsplit=1)[1])
+    command = healthcheck[1:]
+
+    class HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *_args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), HealthHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        command[-1] = command[-1].replace("127.0.0.1:7860", f"127.0.0.1:{port}")
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "HTTP_PROXY": "http://127.0.0.1:9",
+                "HTTPS_PROXY": "http://127.0.0.1:9",
+                "ALL_PROXY": "http://127.0.0.1:9",
+                "NO_PROXY": "",
+            }
+        )
+        result = subprocess.run(
+            [sys.executable, *command],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_space_requirements_match_uv_lock_exactly() -> None:
     lock = tomllib.loads(Path("uv.lock").read_text(encoding="utf-8"))
     locked = {
@@ -41,6 +93,21 @@ def test_space_requirements_match_uv_lock_exactly() -> None:
     requirements = set((SPACE_ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines())
 
     assert {f"{name}=={version}" for name, version in locked.items()} == requirements
+
+
+def test_space_streamlit_config_disables_usage_stats_and_uses_morandi_theme() -> None:
+    config = tomllib.loads((SPACE_ROOT / ".streamlit" / "config.toml").read_text(encoding="utf-8"))
+
+    assert config["browser"]["gatherUsageStats"] is False
+    assert config["theme"] == {
+        "base": "light",
+        "primaryColor": "#718B7A",
+        "backgroundColor": "#F1EFE8",
+        "secondaryBackgroundColor": "#FFFDF9",
+        "textColor": "#26322C",
+        "font": "sans-serif",
+    }
+    assert "address" not in config.get("server", {})
 
 
 def test_space_card_states_every_public_truth_boundary() -> None:
@@ -63,7 +130,7 @@ def test_space_card_states_every_public_truth_boundary() -> None:
 
     assert "aggregate only" in card
     assert "raw runs unpublished" in card
-    assert "[MIT License](../LICENSE)" in card
-    assert "[Third-party notices](../THIRD_PARTY_NOTICES.md)" in card
+    assert "[MIT License](LICENSE)" in card
+    assert "[Third-party notices](THIRD_PARTY_NOTICES.md)" in card
     assert "https://github.com/kuotunyu/local-inference-bench-gateway" in card
     assert re.search(r"https://[^ ]+\.hf\.space", card) is None
