@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+import re
+import tomllib
+from pathlib import Path
+
+SPACE_ROOT = Path("space")
+
+
+def test_space_assets_pin_public_runtime() -> None:
+    card = (SPACE_ROOT / "README.md").read_text(encoding="utf-8")
+    dockerfile = (SPACE_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    requirements = (SPACE_ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
+
+    assert "sdk: docker" in card
+    assert "app_port: 7860" in card
+    assert requirements == [
+        "streamlit==1.61.1",
+        "pandas==3.0.5",
+        "altair==6.2.2",
+    ]
+    assert "FROM python:3.12.13-slim-bookworm" in dockerfile
+    assert "USER 10001:10001" in dockerfile
+    assert "COPY . ." not in dockerfile
+    assert "uvicorn" not in dockerfile.lower()
+    assert "9000" not in dockerfile
+    assert (
+        'CMD ["streamlit", "run", "space/app.py", "--server.address=0.0.0.0", '
+        '"--server.port=7860", "--server.headless=true"]'
+    ) in dockerfile
+    assert "http://127.0.0.1:7860/_stcore/health" in dockerfile
+
+
+def test_space_requirements_match_uv_lock_exactly() -> None:
+    lock = tomllib.loads(Path("uv.lock").read_text(encoding="utf-8"))
+    locked = {
+        package["name"]: package["version"]
+        for package in lock["package"]
+        if package["name"] in {"streamlit", "pandas", "altair"}
+    }
+    requirements = set((SPACE_ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines())
+
+    assert {f"{name}=={version}" for name, version in locked.items()} == requirements
+
+
+def test_space_card_states_every_public_truth_boundary() -> None:
+    card = (SPACE_ROOT / "README.md").read_text(encoding="utf-8")
+
+    required_copy = (
+        "公開證據示範（Demo Mode）",
+        "此 Space 僅呈現 deterministic illustrative fixture 與 2026-07-17 committed aggregate "
+        "evidence。它不會、也無法連線到訪客的本機 Gateway、SQLite、inference backend 或 GPU；不是 live "
+        "inference service，亦無 SLA。Space 可能休眠或 cold-start；其啟動狀態不代表 Gateway uptime。",
+        "Deterministic Demo data is illustrative and is not production or sampled traffic.",
+        "Benchmark evidence is a dated, hardware- and version-specific snapshot.",
+        "Request-level raw benchmark runs are not public.",
+        "This Space cannot connect to a visitor's local system.",
+        "This Space provides neither live inference nor an SLA.",
+        "Hosting sleep or cold start is not system uptime evidence.",
+    )
+    for phrase in required_copy:
+        assert phrase in card
+
+    assert "aggregate only" in card
+    assert "raw runs unpublished" in card
+    assert "[MIT License](../LICENSE)" in card
+    assert "[Third-party notices](../THIRD_PARTY_NOTICES.md)" in card
+    assert "https://github.com/kuotunyu/local-inference-bench-gateway" in card
+    assert re.search(r"https://[^ ]+\.hf\.space", card) is None
