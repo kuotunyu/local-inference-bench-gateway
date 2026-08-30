@@ -10,6 +10,7 @@ from release_checks.docker_policy import verify_docker_policy
 from release_checks.documents import verify_documents
 from release_checks.evidence import verify_evidence
 from release_checks.publication import verify_publication
+from release_checks.space_bundle import verify_space_source
 
 
 def main() -> int:
@@ -27,6 +28,7 @@ def main() -> int:
         ("documents", lambda: verify_documents(repo_root)),
         ("ci", lambda: verify_ci_policy(repo_root)),
         ("docker", lambda: verify_docker_policy(repo_root)),
+        ("space", lambda: verify_space_source(repo_root)),
     )
     total = 0
     for name, check in checks:

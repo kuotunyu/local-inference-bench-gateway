@@ -6,14 +6,52 @@ import hashlib
 import json
 import re
 import shutil
+import subprocess
+import tempfile
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
+
+import yaml
+
+from release_checks.docker_policy import BROAD_COPY_PATTERN
+from release_checks.publication import verify_publication
+from release_checks.space_imports import verify_public_import_boundary
 
 SPACE_ID = "steven0226/local-inference-bench-gateway"
 SOURCE_REPOSITORY = "kuotunyu/local-inference-bench-gateway"
 _SOURCE_COMMIT = re.compile(r"[0-9a-f]{40}")
 _MANIFEST_PATH = PurePosixPath("space/bundle-manifest.json")
 _EVIDENCE_MANIFEST_PATH = PurePosixPath("bench/results/provenance.json")
+_DEPLOYMENT_MANIFEST_PATH = PurePosixPath("deployment-manifest.json")
+_DEPLOYMENT_KEYS = {
+    "schema_version",
+    "space_id",
+    "source_repository",
+    "source_commit",
+    "export_manifest_sha256",
+    "evidence_manifest_sha256",
+}
+_CONTROL_MANIFESTS = {
+    "bench/results/claims.json",
+    "bench/results/provenance.json",
+}
+_REQUIRED_DEPENDENCIES = (
+    "streamlit==1.61.1",
+    "pandas==3.0.5",
+    "altair==6.2.2",
+)
+_TEXT_EVIDENCE_SUFFIXES = {".csv", ".json"}
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+_GPU_CONFIGURATION = re.compile(
+    r"(?:NVIDIA|CUDA)_VISIBLE_DEVICES|(?:^|\s)--gpus(?:\s|=)|"
+    r"\b(?:cuda|nvidia-container-runtime)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+_BROAD_JSON_COPY_PATTERN = re.compile(
+    r'^\s*(?:COPY|ADD)\s+(?:--[^\s]+\s+)*\[\s*"\."\s*,',
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 class BundleManifestError(ValueError):
@@ -139,3 +177,343 @@ def export_space_bundle(repo_root: Path, destination: Path, source_commit: str) 
         newline="\n",
     )
     return deployment_path
+
+
+def _read_text(path: Path, label: str, violations: list[str]) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        violations.append(f"cannot read {label}")
+        return ""
+
+
+def _read_json(path: Path, label: str, violations: list[str]) -> object | None:
+    text = _read_text(path, label, violations)
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        violations.append(f"invalid {label}")
+        return None
+
+
+def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        capture_output=True,
+        check=False,
+    )
+
+
+def _commit_exists(repo_root: Path, source_commit: str) -> bool:
+    return _git(repo_root, "cat-file", "-e", f"{source_commit}^{{commit}}").returncode == 0
+
+
+def _committed_bytes(repo_root: Path, source_commit: str, relative: PurePosixPath) -> bytes | None:
+    result = _git(repo_root, "show", f"{source_commit}:{relative.as_posix()}")
+    return result.stdout if result.returncode == 0 else None
+
+
+def _actual_bundle_paths(bundle_root: Path, violations: list[str]) -> set[str]:
+    if not bundle_root.is_dir():
+        violations.append("bundle root is not a directory")
+        return set()
+    actual: set[str] = set()
+    try:
+        candidates = sorted(bundle_root.rglob("*"))
+    except OSError:
+        violations.append("cannot enumerate bundle files")
+        return set()
+    for path in candidates:
+        relative = path.relative_to(bundle_root).as_posix()
+        if path.is_symlink():
+            violations.append(f"bundle symlink is forbidden: {relative}")
+        if path.is_file():
+            actual.add(relative)
+    return actual
+
+
+def _deployment_document(bundle_root: Path, violations: list[str]) -> dict[str, object] | None:
+    document = _read_json(
+        bundle_root / Path(*_DEPLOYMENT_MANIFEST_PATH.parts),
+        "deployment manifest",
+        violations,
+    )
+    if document is None:
+        return None
+    if not isinstance(document, dict):
+        violations.append("deployment manifest must be an object")
+        return None
+    if set(document) != _DEPLOYMENT_KEYS:
+        violations.append("deployment manifest keys do not match the required schema")
+    if type(document.get("schema_version")) is not int or document.get("schema_version") != 1:
+        violations.append("deployment manifest schema_version must be 1")
+    if document.get("space_id") != SPACE_ID:
+        violations.append(f"Space ID must be {SPACE_ID}")
+    if document.get("source_repository") != SOURCE_REPOSITORY:
+        violations.append(f"source repository must be {SOURCE_REPOSITORY}")
+    for key in ("export_manifest_sha256", "evidence_manifest_sha256"):
+        value = document.get(key)
+        if not isinstance(value, str) or not _SHA256.fullmatch(value):
+            violations.append(f"invalid deployment digest: {key}")
+    return document
+
+
+def _verify_deployment_digests(
+    repo_root: Path,
+    deployment: dict[str, object],
+    source_commit: str,
+    violations: list[str],
+) -> None:
+    declarations = (
+        ("export_manifest_sha256", _MANIFEST_PATH),
+        ("evidence_manifest_sha256", _EVIDENCE_MANIFEST_PATH),
+    )
+    for key, source in declarations:
+        source_bytes = _committed_bytes(repo_root, source_commit, source)
+        if source_bytes is None:
+            violations.append(f"missing source commit file: {source.as_posix()}")
+            continue
+        if deployment.get(key) != hashlib.sha256(source_bytes).hexdigest():
+            violations.append(f"deployment digest mismatch: {key}")
+
+
+def _verify_source_bytes(
+    repo_root: Path,
+    bundle_root: Path,
+    entries: tuple[BundleEntry, ...],
+    source_commit: str,
+    violations: list[str],
+) -> None:
+    for entry in entries:
+        bundle_path = bundle_root.joinpath(*entry.destination.parts)
+        if not bundle_path.is_file():
+            continue
+        source_bytes = _committed_bytes(repo_root, source_commit, entry.source)
+        if source_bytes is None:
+            violations.append(f"missing source commit file: {entry.source.as_posix()}")
+            continue
+        try:
+            bundle_bytes = bundle_path.read_bytes()
+        except OSError:
+            violations.append(f"cannot read bundle file: {entry.destination.as_posix()}")
+            continue
+        if bundle_bytes != source_bytes:
+            label = (
+                "evidence byte mismatch"
+                if entry.destination.as_posix().startswith("bench/results/")
+                else "source byte mismatch"
+            )
+            violations.append(f"{label}: {entry.destination.as_posix()}")
+
+
+def _evidence_digest(path: Path) -> str:
+    data = path.read_bytes()
+    if path.suffix.lower() in _TEXT_EVIDENCE_SUFFIXES:
+        data = data.replace(b"\r\n", b"\n")
+    return hashlib.sha256(data).hexdigest()
+
+
+def _verify_evidence_bundle(
+    bundle_root: Path, expected_paths: set[str], violations: list[str]
+) -> None:
+    provenance = _read_json(
+        bundle_root / "bench" / "results" / "provenance.json",
+        "evidence manifest",
+        violations,
+    )
+    if not isinstance(provenance, dict):
+        return
+    controls = provenance.get("control_manifests")
+    if (
+        not isinstance(controls, list)
+        or not all(isinstance(item, str) for item in controls)
+        or set(controls) != _CONTROL_MANIFESTS
+    ):
+        violations.append("evidence control manifests do not match the required set")
+        controls = []
+    artifacts = provenance.get("artifacts")
+    if not isinstance(artifacts, list):
+        violations.append("evidence artifacts must be a list")
+        return
+
+    evidence_paths = {item for item in controls if isinstance(item, str)}
+    seen_artifacts: set[str] = set()
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            violations.append("evidence artifact declaration must be an object")
+            continue
+        relative = artifact.get("path")
+        digest = artifact.get("sha256")
+        if not isinstance(relative, str):
+            violations.append("evidence artifact path must be a string")
+            continue
+        try:
+            safe_relative = _safe_path(relative, source=False)
+        except BundleManifestError:
+            violations.append("evidence artifact path escapes bundle")
+            continue
+        display = safe_relative.as_posix()
+        if display in seen_artifacts:
+            violations.append(f"duplicate evidence artifact: {display}")
+        seen_artifacts.add(display)
+        evidence_paths.add(display)
+        if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
+            violations.append(f"invalid evidence digest: {display}")
+            continue
+        path = bundle_root.joinpath(*safe_relative.parts)
+        if not path.is_file():
+            continue
+        try:
+            actual_digest = _evidence_digest(path)
+        except OSError:
+            violations.append(f"cannot read evidence artifact: {display}")
+            continue
+        if actual_digest != digest:
+            violations.append(f"evidence byte mismatch: {display}")
+
+    expected_evidence = {
+        relative for relative in expected_paths if relative.startswith("bench/results/")
+    }
+    if evidence_paths != expected_evidence:
+        violations.append("evidence paths do not match the bundle manifest")
+
+
+def _verify_dockerfile(bundle_root: Path, violations: list[str]) -> None:
+    dockerfile = _read_text(bundle_root / "Dockerfile", "Space Dockerfile", violations)
+    if not dockerfile:
+        return
+    from_lines = re.findall(r"^\s*FROM\s+([^\s]+)", dockerfile, re.IGNORECASE | re.MULTILINE)
+    if from_lines != ["python:3.12.13-slim-bookworm"]:
+        violations.append("Space base image must be python:3.12.13-slim-bookworm")
+    user_lines = re.findall(r"^\s*USER\s+([^\s]+)", dockerfile, re.IGNORECASE | re.MULTILINE)
+    if not user_lines or user_lines[-1] != "10001:10001":
+        violations.append("Space runtime user must be 10001:10001")
+    if BROAD_COPY_PATTERN.search(dockerfile) or _BROAD_JSON_COPY_PATTERN.search(dockerfile):
+        violations.append("broad Docker COPY/ADD is forbidden")
+    if _GPU_CONFIGURATION.search(dockerfile):
+        violations.append("GPU configuration is forbidden in the Space Dockerfile")
+    if re.search(r"(?<!\d)9000(?!\d)", dockerfile):
+        violations.append("gateway port 9000 is forbidden in the Space Dockerfile")
+    exposed = re.findall(r"^\s*EXPOSE\s+([^\s]+)", dockerfile, re.IGNORECASE | re.MULTILINE)
+    if exposed != ["7860"]:
+        violations.append("Space Dockerfile must expose only port 7860")
+    required_tokens = (
+        "http://127.0.0.1:7860/_stcore/health",
+        'CMD ["streamlit", "run", "space/app.py", "--server.address=0.0.0.0", '
+        '"--server.port=7860", "--server.headless=true"]',
+    )
+    for token in required_tokens:
+        if token not in dockerfile:
+            violations.append(f"Space Dockerfile lacks required token: {token}")
+
+
+def _verify_requirements(repo_root: Path, bundle_root: Path, violations: list[str]) -> None:
+    requirements = _read_text(
+        bundle_root / "requirements.txt", "Space requirements", violations
+    ).splitlines()
+    if requirements != list(_REQUIRED_DEPENDENCIES):
+        violations.append("Space dependencies must be exactly pinned")
+    try:
+        lock = tomllib.loads((repo_root / "uv.lock").read_text(encoding="utf-8"))
+        locked = {
+            package["name"]: package["version"]
+            for package in lock["package"]
+            if package.get("name") in {"streamlit", "pandas", "altair"}
+        }
+    except (KeyError, OSError, TypeError, UnicodeError, tomllib.TOMLDecodeError):
+        violations.append("cannot verify Space dependencies against uv.lock")
+        return
+    if {f"{name}=={version}" for name, version in locked.items()} != set(_REQUIRED_DEPENDENCIES):
+        violations.append("Space dependency pins do not match uv.lock")
+
+
+def _verify_card(bundle_root: Path, violations: list[str]) -> None:
+    card = _read_text(bundle_root / "README.md", "Space card", violations)
+    if not card:
+        return
+    parts = card.split("---", maxsplit=2)
+    try:
+        metadata = yaml.safe_load(parts[1]) if len(parts) == 3 and not parts[0].strip() else None
+    except yaml.YAMLError:
+        metadata = None
+    if not isinstance(metadata, dict):
+        violations.append("invalid Space card metadata")
+    else:
+        if metadata.get("sdk") != "docker":
+            violations.append("Space card sdk must be docker")
+        if metadata.get("app_port") != 7860:
+            violations.append("Space card app_port must be 7860")
+        if metadata.get("license") != "mit":
+            violations.append("Space card license must be mit")
+    for label, target in (
+        ("MIT License", "LICENSE"),
+        ("Third-party notices", "THIRD_PARTY_NOTICES.md"),
+    ):
+        if f"[{label}]({target})" not in card:
+            violations.append(f"Space card must link {target}")
+    if "https://github.com/kuotunyu/local-inference-bench-gateway" not in card:
+        violations.append("Space card must link the canonical source repository")
+    if re.search(r"https://[^\s)]+\.hf\.space", card):
+        violations.append("Space card must not hard-code an ephemeral hf.space URL")
+
+
+def verify_space_bundle(repo_root: Path, bundle_root: Path) -> list[str]:
+    """Return fail-closed policy violations for an exported public Space bundle."""
+    repo_root = repo_root.resolve()
+    bundle_root = bundle_root.resolve()
+    violations: list[str] = []
+    try:
+        entries = load_bundle_manifest(repo_root)
+    except BundleManifestError as error:
+        return [f"invalid source bundle manifest: {error}"]
+
+    expected_paths = {entry.destination.as_posix() for entry in entries}
+    expected_paths.add(_DEPLOYMENT_MANIFEST_PATH.as_posix())
+    actual_paths = _actual_bundle_paths(bundle_root, violations)
+    for relative in sorted(expected_paths - actual_paths):
+        violations.append(f"missing required bundle file: {relative}")
+    for relative in sorted(actual_paths - expected_paths):
+        violations.append(f"undeclared bundle file: {relative}")
+
+    violations.extend(verify_publication(bundle_root, export_mode=True))
+    deployment = _deployment_document(bundle_root, violations)
+    source_commit = deployment.get("source_commit") if deployment else None
+    if not isinstance(source_commit, str) or not _SOURCE_COMMIT.fullmatch(source_commit):
+        violations.append("invalid source revision")
+    elif not _commit_exists(repo_root, source_commit):
+        violations.append("source revision is unavailable in the repository")
+    else:
+        assert deployment is not None
+        _verify_deployment_digests(repo_root, deployment, source_commit, violations)
+        _verify_source_bytes(repo_root, bundle_root, entries, source_commit, violations)
+
+    _verify_evidence_bundle(bundle_root, expected_paths, violations)
+    _verify_dockerfile(bundle_root, violations)
+    _verify_requirements(repo_root, bundle_root, violations)
+    _verify_card(bundle_root, violations)
+    violations.extend(verify_public_import_boundary(bundle_root))
+    return list(dict.fromkeys(violations))
+
+
+def verify_space_source(repo_root: Path) -> list[str]:
+    """Export the current local revision and verify its complete public boundary."""
+    repo_root = repo_root.resolve()
+    result = _git(repo_root, "rev-parse", "HEAD")
+    if result.returncode:
+        return ["cannot determine source revision"]
+    try:
+        source_commit = result.stdout.decode("ascii").strip()
+    except UnicodeDecodeError:
+        return ["cannot determine source revision"]
+    if not _SOURCE_COMMIT.fullmatch(source_commit):
+        return ["cannot determine source revision"]
+    try:
+        with tempfile.TemporaryDirectory(prefix="space-bundle-check-") as temporary:
+            bundle_root = Path(temporary) / "bundle"
+            export_space_bundle(repo_root, bundle_root, source_commit)
+            return verify_space_bundle(repo_root, bundle_root)
+    except (BundleExportError, OSError) as error:
+        return [f"cannot export Space source: {type(error).__name__}"]
