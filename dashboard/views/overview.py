@@ -20,10 +20,8 @@ from dashboard.components import (
     render_source_badge,
     render_state_message,
 )
-from dashboard.data.live_status import GatewayStatus
 from dashboard.metrics import OverviewMetrics, bucket_request_series, compute_overview
-from dashboard.models import TelemetrySnapshot
-from gateway.registry import Registry
+from dashboard.models import OperationsDisplay, TelemetrySnapshot
 
 DISPLAY_TIMEZONE = ZoneInfo("Asia/Taipei")
 ACTIVITY_INTERVALS = tuple(
@@ -173,30 +171,34 @@ def build_activity_chart(series: pd.DataFrame) -> alt.Chart:
     )
 
 
-def _render_health(status: GatewayStatus) -> None:
-    st.markdown("### Backend Health · 目前觀測")
-    if not status.reachable:
+def _render_health(operations: OperationsDisplay) -> None:
+    st.markdown(f"### {operations.backend_heading}")
+    if operations.backend_state == "offline":
         render_state_message(
             "Gateway 離線",
-            "仍可閱讀已寫入的 Telemetry；離線不代表歷史 Backend Health 或 SLA。",
+            operations.backend_message
+            or "仍可閱讀已寫入的 Telemetry；離線不代表歷史 Backend Health 或 SLA。",
             "warning",
         )
         return
-    if not status.backends:
+    if operations.backend_state == "unavailable":
         render_state_message(
             "Gateway 可連線",
-            f"Backend Health 暫時無法取得（{status.reason}）；目前不推測 Backend 狀態。",
+            "Backend Health 暫時無法取得"
+            f"（{operations.backend_message or 'unknown'}）；目前不推測 Backend 狀態。",
         )
         return
-    for url, health in status.backends.items():
-        healthy = bool(health.get("healthy"))
-        label = "正常" if healthy else "降級"
+    if operations.backend_state == "fixture" and operations.backend_message:
+        st.caption(operations.backend_message)
+    for backend in operations.backends:
+        healthy = backend.healthy
+        label = "正常" if healthy else ("降級" if healthy is False else "未知")
         tone = "healthy" if healthy else "warning"
-        name = url.split("//")[-1].split("/")[0]
+        detail = "固定 fixture" if operations.backend_state == "fixture" else "目前 probe"
         st.markdown(
             f'<div class="status-card"><span class="status-dot {tone}"></span>'
-            f"<strong>{escape_html(name)}</strong><br>"
-            f"<small>{escape_html(label)} · 目前 probe</small></div>",
+            f"<strong>{escape_html(backend.name)}</strong><br>"
+            f"<small>{escape_html(label)} · {detail}</small></div>",
             unsafe_allow_html=True,
         )
 
@@ -204,20 +206,16 @@ def _render_health(status: GatewayStatus) -> None:
 def render_overview(
     snapshot: TelemetrySnapshot,
     source_kind: str,
-    status: GatewayStatus,
-    registry: Registry,
+    operations: OperationsDisplay,
     observation_window_minutes: int | None = None,
 ) -> None:
     model = build_overview_model(snapshot, source_kind, observation_window_minutes)
     render_page_heading(
         "GATEWAY OVERVIEW",
         "推論閘道運行概覽",
-        "彙整 Request throughput、latency、routing、Failover 與 Backend Health，呈現所選觀測時間範圍內可追溯的運行狀態。",
+        operations.overview_lede,
     )
-    source_note = _time_note(model)
-    if source_kind == "demo":
-        source_note += " · 示範 fixture，非正式流量"
-    render_source_badge(source_kind, source_note)
+    render_source_badge(source_kind, f"{_time_note(model)} · {operations.source_note}")
 
     metrics = model.metrics
     cards = [
@@ -267,13 +265,13 @@ def render_overview(
 
     health_col, route_col, failover_col = st.columns([1, 1, 1.2], gap="medium")
     with health_col:
-        _render_health(status)
+        _render_health(operations)
     with route_col:
         st.markdown("### Alias Routing")
-        for alias, config in registry.items():
-            chain = " → ".join(backend.name for backend in config.backends)
-            cap = "無上限" if config.max_concurrent is None else f"上限 {config.max_concurrent}"
-            st.markdown(f"**{alias}**　`{chain}`　 · {cap}")
+        for route in operations.routes:
+            chain = " → ".join(route.backend_names)
+            cap = "無上限" if route.max_concurrent is None else f"上限 {route.max_concurrent}"
+            st.markdown(f"**{route.alias}**　`{chain}`　 · {cap}")
     with failover_col:
         st.markdown("### 近期 Failover")
         if snapshot.failovers.empty:

@@ -15,10 +15,8 @@ from dashboard.components import (
     render_source_badge,
     render_state_message,
 )
-from dashboard.data.live_status import GatewayStatus
 from dashboard.metrics import with_error_categories
-from dashboard.models import TelemetrySnapshot
-from gateway.registry import Registry
+from dashboard.models import OperationsDisplay, TelemetrySnapshot
 
 
 @dataclass(frozen=True)
@@ -30,9 +28,8 @@ class ReliabilityModel:
 
 
 def build_reliability_model(
-    snapshot: TelemetrySnapshot, status: GatewayStatus, registry: Registry
+    snapshot: TelemetrySnapshot, operations: OperationsDisplay
 ) -> ReliabilityModel:
-    del status
     categorized = with_error_categories(snapshot.requests)
     errors = (
         categorized.dropna(subset=["error_category"])
@@ -42,15 +39,15 @@ def build_reliability_model(
     )
     routes = [
         {
-            "alias": alias,
-            "chain": [backend.name for backend in config.backends],
-            "models": [backend.model for backend in config.backends],
-            "max_concurrent": config.max_concurrent,
+            "alias": route.alias,
+            "chain": list(route.backend_names),
+            "models": list(route.models),
+            "max_concurrent": route.max_concurrent,
         }
-        for alias, config in registry.items()
+        for route in operations.routes
     ]
     backpressure = categorized["error_category"].eq("Backpressure").sum()
-    return ReliabilityModel("Backend Health · 目前觀測", routes, errors, int(backpressure))
+    return ReliabilityModel(operations.backend_heading, routes, errors, int(backpressure))
 
 
 def build_error_chart(errors: pd.DataFrame) -> alt.Chart:
@@ -74,19 +71,15 @@ def build_error_chart(errors: pd.DataFrame) -> alt.Chart:
 def render_reliability(
     snapshot: TelemetrySnapshot,
     source_kind: str,
-    status: GatewayStatus,
-    registry: Registry,
+    operations: OperationsDisplay,
 ) -> None:
-    model = build_reliability_model(snapshot, status, registry)
+    model = build_reliability_model(snapshot, operations)
     render_page_heading(
         "ROUTING & RELIABILITY",
         "路由與可靠性分析",
-        "對照 Alias Routing、Request-time Failover、Backend Health 與 Backpressure，檢視路由決策及失效處理。",
+        operations.reliability_lede,
     )
-    note = "SQLite Telemetry + models.yaml"
-    if source_kind == "demo":
-        note += " · 示範 fixture"
-    render_source_badge(source_kind, note)
+    render_source_badge(source_kind, operations.source_note)
     st.caption(
         "Routing 原則 · Health polling 僅供觀測；每個 Request 仍會依照 ordered Backend chain "
         "實際嘗試，不會根據可能過期的 health flag 跳過 Backend。"
@@ -112,21 +105,31 @@ def render_reliability(
                 )
     with health_col:
         st.markdown(f"### {model.health_heading}")
-        if not status.reachable:
-            render_state_message("Gateway 離線", "無法取得目前 probe；不推算 uptime。", "warning")
-        elif not status.backends:
+        if operations.backend_state == "offline":
+            render_state_message(
+                "Gateway 離線",
+                "無法取得目前 probe；不推算 uptime。"
+                + (f" {operations.backend_message}" if operations.backend_message else ""),
+                "warning",
+            )
+        elif operations.backend_state == "unavailable":
             render_state_message(
                 "Backend Health 詳細資訊無法取得",
-                "Gateway 可連線，但 Backend detail 未授權或尚未回報。",
+                "Gateway 可連線，但 Backend detail 未授權或尚未回報。"
+                + (f" {operations.backend_message}" if operations.backend_message else ""),
             )
         else:
+            if operations.backend_state == "fixture" and operations.backend_message:
+                st.caption(operations.backend_message)
             health_rows = []
-            for url, entry in status.backends.items():
+            for backend in operations.backends:
                 health_rows.append(
                     {
-                        "backend": url.split("//")[-1],
-                        "status": "正常" if entry.get("healthy") else "降級",
-                        "last_checked": entry.get("last_checked") or "—",
+                        "backend": backend.name,
+                        "status": "正常"
+                        if backend.healthy
+                        else ("降級" if backend.healthy is False else "未知"),
+                        "last_checked": backend.last_checked or "—",
                     }
                 )
             st.dataframe(health_rows, hide_index=True, width="stretch")

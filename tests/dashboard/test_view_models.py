@@ -2,9 +2,11 @@ from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from dashboard.data.demo_fixture import ensure_demo_database
 from dashboard.data.live_status import GatewayStatus
+from dashboard.data.operations_adapter import operations_display_from_runtime
 from dashboard.data.sqlite_repository import load_snapshot
 from dashboard.views.overview import (
     _activity_time_guide,
@@ -14,6 +16,17 @@ from dashboard.views.overview import (
 from dashboard.views.overview import _time_note as overview_time_note
 from dashboard.views.reliability import build_error_chart, build_reliability_model
 from gateway.registry import load_registry
+
+
+@pytest.mark.parametrize(
+    "module_path",
+    [Path("dashboard/views/overview.py"), Path("dashboard/views/reliability.py")],
+)
+def test_shared_views_do_not_import_live_or_gateway_types(module_path: Path) -> None:
+    """Fails if a shared view can no longer render from dashboard-owned display data."""
+    source = module_path.read_text(encoding="utf-8")
+    assert "dashboard.data.live_status" not in source
+    assert "gateway.registry" not in source
 
 
 def test_overview_model_discloses_demo_source_and_time_range(tmp_path: Path) -> None:
@@ -109,16 +122,18 @@ def test_activity_bar_width_scales_with_twenty_four_hour_bucket_density() -> Non
 def test_health_is_current_observation_not_uptime(tmp_path: Path) -> None:
     snapshot = load_snapshot(ensure_demo_database(tmp_path))
     status = GatewayStatus(False, model_time(), {}, "offline")
-    model = build_reliability_model(snapshot, status, load_registry())
+    operations = operations_display_from_runtime(status, load_registry(), source_kind="live")
+    model = build_reliability_model(snapshot, operations)
     assert model.health_heading == "Backend Health · 目前觀測"
     assert not hasattr(model, "uptime_pct")
 
 
 def test_error_chart_is_horizontal_and_readable(tmp_path: Path) -> None:
     snapshot = load_snapshot(ensure_demo_database(tmp_path))
-    model = build_reliability_model(
-        snapshot, GatewayStatus(False, model_time(), {}, "offline"), load_registry()
+    operations = operations_display_from_runtime(
+        GatewayStatus(False, model_time(), {}, "offline"), load_registry(), source_kind="live"
     )
+    model = build_reliability_model(snapshot, operations)
 
     spec = build_error_chart(model.errors).to_dict()
 
