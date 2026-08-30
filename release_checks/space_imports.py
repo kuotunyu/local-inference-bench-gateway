@@ -20,10 +20,18 @@ FORBIDDEN_IMPORTS = {
 }
 
 _LOCAL_PACKAGES = {"dashboard", "space"}
-_ALTERNATE_CAPABILITY_IMPORTS = {"_sqlite3", "http.client"}
+_ALTERNATE_CAPABILITY_IMPORTS = {
+    "_sqlite3",
+    "dbm",
+    "ftplib",
+    "http.client",
+    "shelve",
+    "smtplib",
+}
 _DYNAMIC_IMPORTS = {"__import__", "builtins.__import__", "importlib.import_module"}
 _ENVIRONMENT_READS = {"os.getenv", "os.environ"}
-_PROCESS_CAPABILITIES = {"os.system"}
+_FILE_OPEN_CAPABILITIES = {"builtins.open", "io.open", "open", "os.open"}
+_PROCESS_CAPABILITIES = {"os.popen", "os.startfile", "os.system", "pty.spawn"}
 
 
 class ImportBoundaryError(ValueError):
@@ -141,21 +149,15 @@ def _aliases(tree: ast.AST) -> dict[str, set[str]]:
     return aliases
 
 
-def _is_arbitrary_path_read(node: ast.AST, aliases: dict[str, set[str]]) -> bool:
-    if (
-        not isinstance(node, ast.Call)
-        or not isinstance(node.func, ast.Attribute)
-        or node.func.attr not in {"open", "read_bytes", "read_text"}
-        or not isinstance(node.func.value, ast.Call)
-        or "pathlib.Path" not in _qualified_names(node.func.value.func, aliases)
-        or not node.func.value.args
-    ):
+def _is_process_capability(name: str) -> bool:
+    return name in _PROCESS_CAPABILITIES or name.startswith(("os.exec", "os.spawn"))
+
+
+def _is_unsafe_path_literal(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
         return False
-    raw_path = node.func.value.args[0]
-    if not isinstance(raw_path, ast.Constant) or not isinstance(raw_path.value, str):
-        return False
-    posix_path = PurePosixPath(raw_path.value)
-    windows_path = PureWindowsPath(raw_path.value)
+    posix_path = PurePosixPath(node.value)
+    windows_path = PureWindowsPath(node.value)
     return (
         posix_path.is_absolute()
         or bool(windows_path.drive)
@@ -164,9 +166,67 @@ def _is_arbitrary_path_read(node: ast.AST, aliases: dict[str, set[str]]) -> bool
     )
 
 
+def _unsafe_path_bindings(tree: ast.AST, aliases: dict[str, set[str]]) -> set[str]:
+    bindings: set[str] = set()
+    assignments: list[tuple[set[str], ast.AST]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            names = set().union(*(_assigned_names(target) for target in node.targets))
+            assignments.append((names, node.value))
+        elif isinstance(node, ast.AnnAssign) and node.value:
+            assignments.append((_assigned_names(node.target), node.value))
+
+    changed = True
+    while changed:
+        changed = False
+        for names, value in assignments:
+            unsafe = (
+                isinstance(value, ast.Call)
+                and "pathlib.Path" in _qualified_names(value.func, aliases)
+                and bool(value.args)
+                and _is_unsafe_path_literal(value.args[0])
+            ) or (isinstance(value, ast.Name) and value.id in bindings)
+            if unsafe and not names <= bindings:
+                bindings.update(names)
+                changed = True
+    return bindings
+
+
+def _is_unsafe_path_expression(node: ast.AST, unsafe_bindings: set[str]) -> bool:
+    return _is_unsafe_path_literal(node) or (
+        isinstance(node, ast.Name) and node.id in unsafe_bindings
+    )
+
+
+def _is_arbitrary_path_read(
+    node: ast.AST, aliases: dict[str, set[str]], unsafe_bindings: set[str]
+) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    qualified_function = _qualified_names(node.func, aliases)
+    if qualified_function & _FILE_OPEN_CAPABILITIES:
+        return bool(node.args) and _is_unsafe_path_expression(node.args[0], unsafe_bindings)
+    if not isinstance(node.func, ast.Attribute) or node.func.attr not in {
+        "open",
+        "read_bytes",
+        "read_text",
+    }:
+        return False
+    receiver = node.func.value
+    if isinstance(receiver, ast.Name):
+        return receiver.id in unsafe_bindings
+    return (
+        isinstance(receiver, ast.Call)
+        and "pathlib.Path" in _qualified_names(receiver.func, aliases)
+        and bool(receiver.args)
+        and _is_unsafe_path_literal(receiver.args[0])
+    )
+
+
 def _capability_violations(path: PurePosixPath, tree: ast.AST) -> set[str]:
     violations: set[str] = set()
     aliases = _aliases(tree)
+    unsafe_path_bindings = _unsafe_path_bindings(tree, aliases)
     for node in ast.walk(tree):
         imported_names: list[str] = []
         if isinstance(node, ast.Import):
@@ -178,6 +238,8 @@ def _capability_violations(path: PurePosixPath, tree: ast.AST) -> set[str]:
                 imported_names.extend(
                     f"{module}.{imported.name}" for imported in node.names if imported.name != "*"
                 )
+            if any(imported.name == "*" for imported in node.names):
+                violations.add(_display(path, "unsafe star import"))
         for imported_name in imported_names:
             if forbidden := _is_forbidden(imported_name):
                 violations.add(_display(path, f"forbidden import: {forbidden}"))
@@ -185,7 +247,7 @@ def _capability_violations(path: PurePosixPath, tree: ast.AST) -> set[str]:
                 violations.add(_display(path, "dynamic import"))
             if imported_name in _ENVIRONMENT_READS or imported_name.startswith("os.environ."):
                 violations.add(_display(path, "environment read"))
-            if imported_name in _PROCESS_CAPABILITIES:
+            if _is_process_capability(imported_name):
                 violations.add(_display(path, "process execution"))
 
         qualified = _qualified_names(node, aliases)
@@ -195,9 +257,9 @@ def _capability_violations(path: PurePosixPath, tree: ast.AST) -> set[str]:
             name.startswith("os.environ.") for name in qualified
         ):
             violations.add(_display(path, "environment read"))
-        if qualified & _PROCESS_CAPABILITIES:
+        if any(_is_process_capability(name) for name in qualified):
             violations.add(_display(path, "process execution"))
-        if _is_arbitrary_path_read(node, aliases):
+        if _is_arbitrary_path_read(node, aliases, unsafe_path_bindings):
             violations.add(_display(path, "arbitrary path read"))
     return violations
 
@@ -268,31 +330,71 @@ def _assigned_names(target: ast.AST) -> set[str]:
     return set()
 
 
+class _ModuleExportCollector(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.exports: set[str] = set()
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.exports.add(node.name)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.exports.add(node.name)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.exports.add(node.name)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        self.exports.update(
+            imported.asname or imported.name.split(".", 1)[0] for imported in node.names
+        )
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        self.exports.update(
+            imported.asname or imported.name for imported in node.names if imported.name != "*"
+        )
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        for target in node.targets:
+            self.exports.update(_assigned_names(target))
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        self.exports.update(_assigned_names(node.target))
+
+    def visit_AugAssign(self, node: ast.AugAssign) -> None:
+        self.exports.update(_assigned_names(node.target))
+
+    def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+        self.exports.update(_assigned_names(node.target))
+
+    def visit_For(self, node: ast.For) -> None:
+        self.exports.update(_assigned_names(node.target))
+        self.generic_visit(node)
+
+    def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
+        self.exports.update(_assigned_names(node.target))
+        self.generic_visit(node)
+
+    def visit_With(self, node: ast.With) -> None:
+        for item in node.items:
+            if item.optional_vars:
+                self.exports.update(_assigned_names(item.optional_vars))
+        self.generic_visit(node)
+
+    def visit_AsyncWith(self, node: ast.AsyncWith) -> None:
+        for item in node.items:
+            if item.optional_vars:
+                self.exports.update(_assigned_names(item.optional_vars))
+        self.generic_visit(node)
+
+
 def _static_package_exports(bundle_root: Path, path: PurePosixPath) -> set[str]:
     tree, error = _parse_source(bundle_root, path)
     if error:
         raise ImportBoundaryError(error)
     assert isinstance(tree, ast.Module)
-    exports: set[str] = set()
-    for statement in tree.body:
-        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            exports.add(statement.name)
-        elif isinstance(statement, ast.Import):
-            exports.update(
-                imported.asname or imported.name.split(".", 1)[0] for imported in statement.names
-            )
-        elif isinstance(statement, ast.ImportFrom):
-            exports.update(
-                imported.asname or imported.name
-                for imported in statement.names
-                if imported.name != "*"
-            )
-        elif isinstance(statement, ast.Assign):
-            for target in statement.targets:
-                exports.update(_assigned_names(target))
-        elif isinstance(statement, (ast.AnnAssign, ast.AugAssign)):
-            exports.update(_assigned_names(statement.target))
-    return exports
+    collector = _ModuleExportCollector()
+    collector.visit(tree)
+    return collector.exports
 
 
 def _scan(
@@ -340,6 +442,7 @@ def public_import_closure(
         and not violation.endswith("environment read")
         and not violation.endswith("dynamic import")
         and not violation.endswith("process execution")
+        and not violation.endswith("unsafe star import")
     ]
     if structural:
         raise ImportBoundaryError(structural[0])
