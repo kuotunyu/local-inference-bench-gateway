@@ -77,6 +77,30 @@ def test_capability_bearing_import_from_is_rejected(
 
 
 @pytest.mark.parametrize(
+    "source",
+    [
+        "from importlib import *\nVALUE = import_module('socket')\n",
+        "from os import *\nVALUE = getenv('KEY')\n",
+    ],
+)
+def test_capability_star_import_is_rejected(tmp_path: Path, source: str) -> None:
+    write_minimal_bundle(tmp_path, source)
+
+    assert verify_public_import_boundary(tmp_path) == ["space/app.py: unsafe star import"]
+
+
+def test_transitive_local_capability_star_reexport_is_rejected(tmp_path: Path) -> None:
+    write_minimal_bundle(
+        tmp_path,
+        "from dashboard.helper import import_module\nVALUE = import_module('gateway.app')\n",
+    )
+    write_python(tmp_path, "dashboard/__init__.py", "")
+    write_python(tmp_path, "dashboard/helper.py", "from importlib import *\n")
+
+    assert verify_public_import_boundary(tmp_path) == ["dashboard/helper.py: unsafe star import"]
+
+
+@pytest.mark.parametrize(
     ("source", "message"),
     [
         (
@@ -89,6 +113,14 @@ def test_capability_bearing_import_from_is_rejected(
         ),
         ("import os\nVALUE = os.system('whoami')\n", "process execution"),
         ("import _sqlite3\n", "forbidden import: _sqlite3"),
+        ("VALUE = open('/etc/passwd').read()\n", "arbitrary path read"),
+        (
+            "from pathlib import Path\nSECRET = Path('/etc/passwd')\nVALUE = SECRET.read_text()\n",
+            "arbitrary path read",
+        ),
+        ("import ftplib\nVALUE = ftplib.FTP('example.com')\n", "forbidden import: ftplib"),
+        ("import os\nVALUE = os.popen('whoami')\n", "process execution"),
+        ("import dbm\nVALUE = dbm.open('local.db')\n", "forbidden import: dbm"),
     ],
 )
 def test_alternate_standard_library_capabilities_are_rejected(
@@ -140,6 +172,26 @@ def test_import_boundary_accepts_static_package_export(tmp_path: Path) -> None:
         PurePosixPath("dashboard/__init__.py"),
         PurePosixPath("space/app.py"),
     )
+
+
+def test_import_boundary_accepts_module_control_flow_package_export(tmp_path: Path) -> None:
+    write_minimal_bundle(tmp_path, "from dashboard import VALUE\n")
+    write_python(tmp_path, "dashboard/__init__.py", "if True:\n    VALUE = 1\n")
+
+    assert verify_public_import_boundary(tmp_path) == []
+
+
+def test_function_local_name_is_not_a_package_export(tmp_path: Path) -> None:
+    write_minimal_bundle(tmp_path, "from dashboard import VALUE\n")
+    write_python(
+        tmp_path,
+        "dashboard/__init__.py",
+        "def configure():\n    VALUE = 1\n",
+    )
+
+    assert verify_public_import_boundary(tmp_path) == [
+        "space/app.py: unresolved local import: dashboard.VALUE"
+    ]
 
 
 def test_import_boundary_terminates_on_cycle(tmp_path: Path) -> None:
