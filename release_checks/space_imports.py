@@ -20,8 +20,10 @@ FORBIDDEN_IMPORTS = {
 }
 
 _LOCAL_PACKAGES = {"dashboard", "space"}
-_DYNAMIC_IMPORTS = {"__import__", "importlib.import_module"}
+_ALTERNATE_CAPABILITY_IMPORTS = {"_sqlite3", "http.client"}
+_DYNAMIC_IMPORTS = {"__import__", "builtins.__import__", "importlib.import_module"}
 _ENVIRONMENT_READS = {"os.getenv", "os.environ"}
+_PROCESS_CAPABILITIES = {"os.system"}
 
 
 class ImportBoundaryError(ValueError):
@@ -109,34 +111,57 @@ def _is_local(module: str) -> bool:
 
 
 def _is_forbidden(module: str) -> str | None:
-    for forbidden in sorted(FORBIDDEN_IMPORTS):
+    for forbidden in sorted(FORBIDDEN_IMPORTS | _ALTERNATE_CAPABILITY_IMPORTS):
         if module == forbidden or module.startswith(f"{forbidden}."):
             return forbidden
     return None
 
 
-def _qualified_name(node: ast.AST, aliases: dict[str, str]) -> str | None:
+def _qualified_names(node: ast.AST, aliases: dict[str, set[str]]) -> set[str]:
     if isinstance(node, ast.Name):
-        return aliases.get(node.id, node.id)
+        return aliases.get(node.id, {node.id})
     if isinstance(node, ast.Attribute):
-        parent = _qualified_name(node.value, aliases)
-        if parent:
-            return f"{parent}.{node.attr}"
-    return None
+        return {f"{parent}.{node.attr}" for parent in _qualified_names(node.value, aliases)}
+    return set()
 
 
-def _aliases(tree: ast.AST) -> dict[str, str]:
-    aliases: dict[str, str] = {}
+def _aliases(tree: ast.AST) -> dict[str, set[str]]:
+    aliases: dict[str, set[str]] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for imported in node.names:
                 bound = imported.asname or imported.name.split(".", 1)[0]
-                aliases[bound] = imported.name if imported.asname else bound
+                aliases.setdefault(bound, set()).add(imported.name if imported.asname else bound)
         elif isinstance(node, ast.ImportFrom) and node.module:
             for imported in node.names:
                 if imported.name != "*":
-                    aliases[imported.asname or imported.name] = f"{node.module}.{imported.name}"
+                    aliases.setdefault(imported.asname or imported.name, set()).add(
+                        f"{node.module}.{imported.name}"
+                    )
     return aliases
+
+
+def _is_arbitrary_path_read(node: ast.AST, aliases: dict[str, set[str]]) -> bool:
+    if (
+        not isinstance(node, ast.Call)
+        or not isinstance(node.func, ast.Attribute)
+        or node.func.attr not in {"open", "read_bytes", "read_text"}
+        or not isinstance(node.func.value, ast.Call)
+        or "pathlib.Path" not in _qualified_names(node.func.value.func, aliases)
+        or not node.func.value.args
+    ):
+        return False
+    raw_path = node.func.value.args[0]
+    if not isinstance(raw_path, ast.Constant) or not isinstance(raw_path.value, str):
+        return False
+    posix_path = PurePosixPath(raw_path.value)
+    windows_path = PureWindowsPath(raw_path.value)
+    return (
+        posix_path.is_absolute()
+        or bool(windows_path.drive)
+        or bool(windows_path.root)
+        or ".." in posix_path.parts
+    )
 
 
 def _capability_violations(path: PurePosixPath, tree: ast.AST) -> set[str]:
@@ -156,14 +181,24 @@ def _capability_violations(path: PurePosixPath, tree: ast.AST) -> set[str]:
         for imported_name in imported_names:
             if forbidden := _is_forbidden(imported_name):
                 violations.add(_display(path, f"forbidden import: {forbidden}"))
+            if imported_name in _DYNAMIC_IMPORTS:
+                violations.add(_display(path, "dynamic import"))
+            if imported_name in _ENVIRONMENT_READS or imported_name.startswith("os.environ."):
+                violations.add(_display(path, "environment read"))
+            if imported_name in _PROCESS_CAPABILITIES:
+                violations.add(_display(path, "process execution"))
 
-        qualified = _qualified_name(node, aliases)
-        if qualified in _DYNAMIC_IMPORTS:
+        qualified = _qualified_names(node, aliases)
+        if qualified & _DYNAMIC_IMPORTS:
             violations.add(_display(path, "dynamic import"))
-        if qualified in _ENVIRONMENT_READS or (
-            qualified is not None and qualified.startswith("os.environ.")
+        if qualified & _ENVIRONMENT_READS or any(
+            name.startswith("os.environ.") for name in qualified
         ):
             violations.add(_display(path, "environment read"))
+        if qualified & _PROCESS_CAPABILITIES:
+            violations.add(_display(path, "process execution"))
+        if _is_arbitrary_path_read(node, aliases):
+            violations.add(_display(path, "arbitrary path read"))
     return violations
 
 
@@ -196,11 +231,12 @@ def _local_dependencies(
                 continue
             dependencies.update(resolved)
             if resolved[-1].name == "__init__.py":
+                package_exports = _static_package_exports(bundle_root, resolved[-1])
                 for imported_module in package_imports:
                     imported_paths = _existing_module_paths(bundle_root, imported_module)
                     if imported_paths:
                         dependencies.update(imported_paths)
-                    else:
+                    elif imported_module.rsplit(".", 1)[-1] not in package_exports:
                         violations.add(
                             _display(path, f"unresolved local import: {imported_module}")
                         )
@@ -222,6 +258,41 @@ def _parse_source(bundle_root: Path, path: PurePosixPath) -> tuple[ast.AST | Non
         return None, _display(path, "syntax error")
     except OSError:
         return None, _display(path, "cannot read Python source")
+
+
+def _assigned_names(target: ast.AST) -> set[str]:
+    if isinstance(target, ast.Name):
+        return {target.id}
+    if isinstance(target, (ast.List, ast.Tuple)):
+        return set().union(*(_assigned_names(item) for item in target.elts))
+    return set()
+
+
+def _static_package_exports(bundle_root: Path, path: PurePosixPath) -> set[str]:
+    tree, error = _parse_source(bundle_root, path)
+    if error:
+        raise ImportBoundaryError(error)
+    assert isinstance(tree, ast.Module)
+    exports: set[str] = set()
+    for statement in tree.body:
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            exports.add(statement.name)
+        elif isinstance(statement, ast.Import):
+            exports.update(
+                imported.asname or imported.name.split(".", 1)[0] for imported in statement.names
+            )
+        elif isinstance(statement, ast.ImportFrom):
+            exports.update(
+                imported.asname or imported.name
+                for imported in statement.names
+                if imported.name != "*"
+            )
+        elif isinstance(statement, ast.Assign):
+            for target in statement.targets:
+                exports.update(_assigned_names(target))
+        elif isinstance(statement, (ast.AnnAssign, ast.AugAssign)):
+            exports.update(_assigned_names(statement.target))
+    return exports
 
 
 def _scan(
@@ -265,8 +336,10 @@ def public_import_closure(
         violation
         for violation in result.violations
         if "forbidden import:" not in violation
+        and not violation.endswith("arbitrary path read")
         and not violation.endswith("environment read")
         and not violation.endswith("dynamic import")
+        and not violation.endswith("process execution")
     ]
     if structural:
         raise ImportBoundaryError(structural[0])
