@@ -40,6 +40,45 @@ jobs:
           uv run --frozen pytest -q -p no:cacheprovider
           uv run --frozen python -m release_checks.cli
 
+      - name: Export public Space bundle
+        run: >-
+          uv run --frozen python scripts/export_hf_space.py
+          --destination "${{ runner.temp }}/hf-space"
+
+      - name: Build non-root public Space image
+        run: >-
+          docker build -t local-inference-bench-gateway-space:rc
+          "${{ runner.temp }}/hf-space"
+
+      - name: Smoke public Space without network
+        run: |
+          docker run -d --name local-inference-space-smoke --network none local-inference-bench-gateway-space:rc
+          runtime_user="$(docker inspect --format '{{.Config.User}}' local-inference-space-smoke)"
+          test "$runtime_user" = "10001:10001"
+          healthy=0
+          deadline=$((SECONDS + 55))
+          for attempt in $(seq 1 45); do
+            if docker exec local-inference-space-smoke python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/_stcore/health', timeout=0.2).read()"; then
+              healthy=1
+              break
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then break; fi
+            sleep 1
+          done
+          if [ "$healthy" -ne 1 ]; then
+            docker logs local-inference-space-smoke >&2
+            exit 1
+          fi
+          ! docker exec local-inference-space-smoke find /app -type f \( -name '*.db' -o -name '*.sqlite*' -o -name '*.gguf' -o -name '*.safetensors' -o -name '*.onnx' -o -name '*.jsonl' \) | grep .
+
+      - name: Always capture public Space logs
+        if: always()
+        run: docker logs local-inference-space-smoke >&2 || true
+
+      - name: Always remove public Space smoke container
+        if: always()
+        run: docker rm -f local-inference-space-smoke || true
+
       - name: Build non-root production image
         run: docker build -t local-inference-bench-gateway:rc .
 
