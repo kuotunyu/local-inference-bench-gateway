@@ -60,11 +60,21 @@ def _claim_displays() -> list[str]:
 
 
 def _rendered_markdown(monkeypatch, evidence) -> str:
+    return "".join(_rendered_blocks(monkeypatch, evidence))
+
+
+def _rendered_blocks(monkeypatch, evidence) -> list[str]:
     capture = MarkdownCapture()
     monkeypatch.setattr(components, "st", capture)
     monkeypatch.setattr(evidence_view, "st", capture)
     evidence_view.render_evidence(evidence)
-    return "".join(capture.markdown_values)
+    return capture.markdown_values
+
+
+def _section_markdown(blocks: list[str], heading: str, next_heading: str | None) -> str:
+    start = blocks.index(heading)
+    end = len(blocks) if next_heading is None else blocks.index(next_heading, start + 1)
+    return "".join(blocks[start:end])
 
 
 def _assert_every_artifact_is_quarantined(state, monkeypatch) -> None:
@@ -193,8 +203,16 @@ def test_evidence_panel_suppresses_unverified_values(
         (tmp_path / "concurrency_summary.csv").write_text("changed", encoding="utf-8")
 
     state = load_public_evidence(tmp_path)
-    rendered = _rendered_markdown(monkeypatch, state.evidence)
+    blocks = _rendered_blocks(monkeypatch, state.evidence)
+    rendered = "".join(blocks)
 
-    assert INTEGRITY_FAILURE in rendered
+    for heading, next_heading in (
+        ("### Aggregate decode throughput 比較", "### 依 concurrency 比較 P50 / P95 TTFT"),
+        ("### 依 concurrency 比較 P50 / P95 TTFT", "### Prefill · 校準後 prompt"),
+        ("### VRAM baseline · concurrency 16", "### LM Studio · Unified KV Cache 控制"),
+    ):
+        assert INTEGRITY_FAILURE in _section_markdown(blocks, heading, next_heading)
+    if degradation in {"missing_provenance", "invalid_provenance"}:
+        assert INTEGRITY_FAILURE in _section_markdown(blocks, "### 測量方法與 provenance", None)
     for value in canonical_values:
         assert value not in rendered
