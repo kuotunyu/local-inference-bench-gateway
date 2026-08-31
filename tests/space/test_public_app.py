@@ -3,9 +3,13 @@ from __future__ import annotations
 import html
 import re
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from streamlit.testing.v1 import AppTest
+
+from release_checks.space_bundle import _rendered_markdown
 
 APP_PATH = Path(__file__).resolve().parents[2] / "space/app.py"
 PUBLIC_PAGES = (
@@ -56,9 +60,10 @@ def _semantic_markdown(app: AppTest) -> str:
 def _https_markdown_links(app: AppTest) -> list[tuple[str, str]]:
     links: list[tuple[str, str]] = []
     for item in app.markdown:
+        rendered = _rendered_markdown(item.value)
         links.extend(
             (accessible_name, url)
-            for accessible_name, url in re.findall(r"\[([^\]]+)\]\((https://[^)]+)\)", item.value)
+            for accessible_name, url in re.findall(r"\[([^\]]+)\]\((https://[^)]+)\)", rendered)
         )
     return links
 
@@ -146,3 +151,21 @@ def test_evidence_first_screen_exposes_only_canonical_https_sources() -> None:
     assert _https_markdown_links(app) == list(CANONICAL_EVIDENCE_LINKS)
     source_links_index = _main_index(app, "markdown", "[GitHub source repository]")
     assert source_links_index < _main_index(app, "markdown", "Aggregate decode throughput")
+
+
+def test_evidence_link_proof_ignores_comments_and_code_spans() -> None:
+    app = cast(
+        AppTest,
+        SimpleNamespace(
+            markdown=[
+                SimpleNamespace(
+                    value="""<!-- [Comment only](https://example.test/comment) -->
+`[Code only](https://example.test/code)`
+[Visible source](https://example.test/visible)
+"""
+                )
+            ]
+        ),
+    )
+
+    assert _https_markdown_links(app) == [("Visible source", "https://example.test/visible")]
