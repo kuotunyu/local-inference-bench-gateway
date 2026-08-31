@@ -82,7 +82,7 @@ jobs:
             if [ "$remaining_ms" -lt "$bounded_probe_ms" ]; then
               bounded_probe_ms="$remaining_ms"
             fi
-            if uv run --frozen python -m release_checks.bounded_command --timeout-ms "$bounded_probe_ms" -- docker exec local-inference-space-smoke python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/_stcore/health', timeout=0.2).read()"; then
+            if ./.venv/bin/python -m release_checks.bounded_command --timeout-ms "$bounded_probe_ms" -- docker exec local-inference-space-smoke python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/_stcore/health', timeout=0.2).read()"; then
               completed_us="$(now_us)"
               if [ "$completed_us" -le "$deadline_us" ]; then
                 healthy=1
@@ -100,22 +100,22 @@ jobs:
             sleep "$(duration_seconds "$bounded_sleep_us")"
           done
           if [ "$healthy" -ne 1 ]; then
-            uv run --frozen python -m release_checks.bounded_command --timeout-ms 5000 -- docker logs local-inference-space-smoke >&2 || true
+            ./.venv/bin/python -m release_checks.bounded_command --timeout-ms 5000 -- docker logs local-inference-space-smoke >&2 || true
             exit 1
           fi
-          if ! forbidden="$(uv run --frozen python -m release_checks.bounded_command --timeout-ms 5000 -- docker exec local-inference-space-smoke find /app -type f \( -name '*.db' -o -name '*.sqlite*' -o -name '*.gguf' -o -name '*.safetensors' -o -name '*.onnx' -o -name '*.jsonl' \))"; then
-            uv run --frozen python -m release_checks.bounded_command --timeout-ms 5000 -- docker logs local-inference-space-smoke >&2 || true
+          if ! forbidden="$(./.venv/bin/python -m release_checks.bounded_command --timeout-ms 5000 -- docker exec local-inference-space-smoke find /app -type f \( -name '*.db' -o -name '*.sqlite*' -o -name '*.gguf' -o -name '*.safetensors' -o -name '*.onnx' -o -name '*.jsonl' \))"; then
+            ./.venv/bin/python -m release_checks.bounded_command --timeout-ms 5000 -- docker logs local-inference-space-smoke >&2 || true
             exit 1
           fi
           test -z "$forbidden"
 
       - name: Always capture public Space logs
         if: always()
-        run: uv run --frozen python -m release_checks.bounded_command --timeout-ms 5000 -- docker logs local-inference-space-smoke >&2 || true
+        run: ./.venv/bin/python -m release_checks.bounded_command --timeout-ms 5000 -- docker logs local-inference-space-smoke >&2 || true
 
       - name: Always remove public Space smoke container
         if: always()
-        run: uv run --frozen python -m release_checks.bounded_command --timeout-ms 10000 -- docker rm -f local-inference-space-smoke || true
+        run: ./.venv/bin/python -m release_checks.bounded_command --timeout-ms 10000 -- docker rm -f local-inference-space-smoke || true
 
       - name: Build non-root production image
         run: docker build -t local-inference-bench-gateway:rc .
