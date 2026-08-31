@@ -56,21 +56,55 @@ jobs:
           docker run -d --name local-inference-space-smoke --network none local-inference-bench-gateway-space:rc
           runtime_user="$(docker inspect --format '{{.Config.User}}' local-inference-space-smoke)"
           test "$runtime_user" = "10001:10001"
+          now_us() {
+            local stamp="${EPOCHREALTIME/./}"
+            printf '%s\n' "$((10#$stamp))"
+          }
+          duration_seconds() {
+            local duration_us="$1"
+            printf '%d.%06d\n' "$((duration_us / 1000000))" "$((duration_us % 1000000))"
+          }
+          health_deadline_ms=55000
+          health_probe_timeout_ms=3000
+          health_sleep_ms=1000
+          health_attempt_limit=45
           healthy=0
-          deadline=$((SECONDS + 55))
-          for attempt in $(seq 1 45); do
-            if docker exec local-inference-space-smoke python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/_stcore/health', timeout=0.2).read()"; then
-              healthy=1
+          started_us="$(now_us)"
+          deadline_us=$((started_us + health_deadline_ms * 1000))
+          for attempt in $(seq 1 "$health_attempt_limit"); do
+            current_us="$(now_us)"
+            remaining_us=$((deadline_us - current_us))
+            if [ "$remaining_us" -le 0 ]; then break; fi
+            probe_timeout_us=$((health_probe_timeout_ms * 1000))
+            bounded_probe_us="$probe_timeout_us"
+            if [ "$remaining_us" -lt "$bounded_probe_us" ]; then
+              bounded_probe_us="$remaining_us"
+            fi
+            if timeout --foreground "$(duration_seconds "$bounded_probe_us")s" docker exec local-inference-space-smoke python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/_stcore/health', timeout=0.2).read()"; then
+              completed_us="$(now_us)"
+              if [ "$completed_us" -le "$deadline_us" ]; then
+                healthy=1
+              fi
               break
             fi
-            if [ "$SECONDS" -ge "$deadline" ]; then break; fi
-            sleep 1
+            current_us="$(now_us)"
+            remaining_us=$((deadline_us - current_us))
+            if [ "$remaining_us" -le 0 ]; then break; fi
+            sleep_us=$((health_sleep_ms * 1000))
+            bounded_sleep_us="$sleep_us"
+            if [ "$remaining_us" -lt "$bounded_sleep_us" ]; then
+              bounded_sleep_us="$remaining_us"
+            fi
+            sleep "$(duration_seconds "$bounded_sleep_us")"
           done
           if [ "$healthy" -ne 1 ]; then
             docker logs local-inference-space-smoke >&2
             exit 1
           fi
-          forbidden="$(docker exec local-inference-space-smoke find /app -type f \( -name '*.db' -o -name '*.sqlite*' -o -name '*.gguf' -o -name '*.safetensors' -o -name '*.onnx' -o -name '*.jsonl' \))"
+          if ! forbidden="$(timeout --foreground 5s docker exec local-inference-space-smoke find /app -type f \( -name '*.db' -o -name '*.sqlite*' -o -name '*.gguf' -o -name '*.safetensors' -o -name '*.onnx' -o -name '*.jsonl' \))"; then
+            docker logs local-inference-space-smoke >&2
+            exit 1
+          fi
           test -z "$forbidden"
 
       - name: Always capture public Space logs
