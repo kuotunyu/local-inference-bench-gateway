@@ -69,6 +69,16 @@ def test_each_public_page_renders(page: str) -> None:
     assert not app.exception
 
 
+def test_request_page_uses_only_the_deterministic_in_memory_fixture() -> None:
+    app = AppTest.from_file(str(APP_PATH)).run(timeout=20)
+    app.radio[0].set_value("Demo Request 紀錄").run(timeout=20)
+
+    assert not app.exception
+    assert "Deterministic in-memory Request fixture" in _semantic_markdown(app)
+    assert len(app.dataframe) == 1
+    assert len(app.dataframe[0].value) == 60
+
+
 def test_public_app_truth_contract_and_control_surface() -> None:
     app = AppTest.from_file(str(APP_PATH)).run(timeout=20)
 

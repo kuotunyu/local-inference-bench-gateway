@@ -11,6 +11,7 @@ from dashboard.data.public_evidence import load_public_evidence
 from dashboard.views import evidence as evidence_view
 
 RESULTS_DIR = Path("bench/results")
+INTEGRITY_FAILURE = "Unavailable — evidence integrity check failed"
 
 
 class MarkdownCapture:
@@ -142,3 +143,58 @@ def test_missing_provenance_quarantines_every_artifact(tmp_path: Path, monkeypat
     (tmp_path / "provenance.json").unlink()
 
     _assert_every_artifact_is_quarantined(load_public_evidence(tmp_path), monkeypatch)
+
+
+@pytest.mark.parametrize(
+    ("degradation", "canonical_values"),
+    [
+        (
+            "missing_provenance",
+            (
+                "2026-07-17",
+                "NVIDIA GeForce RTX 4090",
+                "Ministral-3-8B-Instruct-2512-Q4_K_M.gguf",
+            ),
+        ),
+        (
+            "invalid_provenance",
+            (
+                "2026-07-17",
+                "NVIDIA GeForce RTX 4090",
+                "Ministral-3-8B-Instruct-2512-Q4_K_M.gguf",
+            ),
+        ),
+        (
+            "tampered_concurrency",
+            (
+                "626 tok/s",
+                "705 tok/s",
+                "687 tok/s",
+                "15,271 MiB",
+                "6,515 MiB",
+                "42.7%",
+            ),
+        ),
+    ],
+)
+def test_evidence_panel_suppresses_unverified_values(
+    tmp_path: Path,
+    monkeypatch,
+    degradation: str,
+    canonical_values: tuple[str, ...],
+) -> None:
+    copy_results(RESULTS_DIR, tmp_path)
+    provenance_path = tmp_path / "provenance.json"
+    if degradation == "missing_provenance":
+        provenance_path.unlink()
+    elif degradation == "invalid_provenance":
+        provenance_path.write_text('{"artifacts":"invalid"}', encoding="utf-8")
+    else:
+        (tmp_path / "concurrency_summary.csv").write_text("changed", encoding="utf-8")
+
+    state = load_public_evidence(tmp_path)
+    rendered = _rendered_markdown(monkeypatch, state.evidence)
+
+    assert INTEGRITY_FAILURE in rendered
+    for value in canonical_values:
+        assert value not in rendered
