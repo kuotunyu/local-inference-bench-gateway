@@ -19,10 +19,10 @@ from tests.space.test_exporter import expected_bundle_paths
 Mutation = Callable[[Path], None]
 
 
-def _head_revision() -> str:
+def _head_revision(repo_root: Path = Path.cwd()) -> str:
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"],
-        cwd=Path.cwd(),
+        cwd=repo_root,
         capture_output=True,
         text=True,
         check=True,
@@ -34,6 +34,17 @@ def export_valid_bundle(tmp_path: Path) -> Path:
     bundle = tmp_path / "bundle"
     export_space_bundle(Path.cwd(), bundle, _head_revision())
     return bundle
+
+
+def clone_source_repo(tmp_path: Path) -> Path:
+    repo_root = tmp_path / "repo"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--no-hardlinks", str(Path.cwd()), str(repo_root)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return repo_root
 
 
 def _write(bundle: Path, relative: str, content: str | bytes) -> None:
@@ -103,6 +114,24 @@ def add_json_broad_copy(bundle: Path) -> None:
     )
 
 
+def add_relative_broad_copy(bundle: Path) -> None:
+    path = bundle / "Dockerfile"
+    path.write_text(path.read_text(encoding="utf-8") + "\nCOPY ./ /shadow\n", encoding="utf-8")
+
+
+def add_relative_broad_add(bundle: Path) -> None:
+    path = bundle / "Dockerfile"
+    path.write_text(path.read_text(encoding="utf-8") + "\nADD ./ /shadow\n", encoding="utf-8")
+
+
+def add_json_broad_add(bundle: Path) -> None:
+    path = bundle / "Dockerfile"
+    path.write_text(
+        path.read_text(encoding="utf-8") + '\nADD ["./", "/shadow"]\n',
+        encoding="utf-8",
+    )
+
+
 def add_gpu_term(bundle: Path) -> None:
     path = bundle / "Dockerfile"
     path.write_text(
@@ -139,6 +168,9 @@ def add_gateway_port(bundle: Path) -> None:
         (make_root_user, "Space runtime user must be 10001:10001"),
         (add_broad_copy, "broad Docker COPY"),
         (add_json_broad_copy, "broad Docker COPY"),
+        (add_relative_broad_copy, "broad Docker COPY"),
+        (add_relative_broad_add, "broad Docker COPY"),
+        (add_json_broad_add, "broad Docker COPY"),
         (add_gpu_term, "GPU configuration"),
         (add_cuda_visible_devices, "GPU configuration"),
         (add_gateway_port, "gateway port 9000"),
@@ -172,6 +204,160 @@ def test_bundle_verifier_fails_closed_on_non_string_control_manifest(tmp_path: P
 
     assert any(
         "evidence control manifests" in item for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
+def test_bundle_verifier_uses_source_commit_allowlist_not_dirty_checkout(tmp_path: Path) -> None:
+    repo_root = clone_source_repo(tmp_path)
+    bundle = tmp_path / "bundle"
+    export_space_bundle(repo_root, bundle, _head_revision(repo_root))
+    manifest_path = repo_root / "space/bundle-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    [report_entry] = [
+        entry for entry in manifest["files"] if entry["destination"] == "EVAL_REPORT.md"
+    ]
+    report_entry["destination"] = "RENAMED_REPORT.md"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    (bundle / "EVAL_REPORT.md").rename(bundle / "RENAMED_REPORT.md")
+
+    assert any(
+        "missing required bundle file: EVAL_REPORT.md" in item
+        for item in verify_space_bundle(repo_root, bundle)
+    )
+
+
+def test_bundle_verifier_uses_source_commit_lock_not_dirty_checkout(tmp_path: Path) -> None:
+    repo_root = clone_source_repo(tmp_path)
+    bundle = tmp_path / "bundle"
+    export_space_bundle(repo_root, bundle, _head_revision(repo_root))
+    lock_path = repo_root / "uv.lock"
+    lock_text = lock_path.read_text(encoding="utf-8")
+    mutated = lock_text.replace(
+        'name = "streamlit"\nversion = "1.61.1"',
+        'name = "streamlit"\nversion = "0.0.0"',
+    )
+    assert mutated != lock_text
+    lock_path.write_text(mutated, encoding="utf-8")
+
+    assert verify_space_bundle(repo_root, bundle) == []
+
+
+@pytest.mark.parametrize("mutation", ["extra", "missing", "repeated"])
+def test_bundle_verifier_requires_twelve_unique_canonical_evidence_artifacts(
+    tmp_path: Path, mutation: str
+) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    provenance_path = bundle / "bench/results/provenance.json"
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    if mutation == "extra":
+        extra_path = "bench/results/extra.json"
+        _write(bundle, extra_path, "{}")
+        provenance["artifacts"].append(
+            {
+                "path": extra_path,
+                "sha256": hashlib.sha256(b"{}").hexdigest(),
+                "class": "measured_summary",
+                "description": "hostile extra",
+            }
+        )
+    elif mutation == "missing":
+        provenance["artifacts"].pop()
+    else:
+        provenance["artifacts"].append(dict(provenance["artifacts"][0]))
+    provenance_path.write_text(json.dumps(provenance), encoding="utf-8")
+
+    assert any(
+        "exactly 12 unique canonical paths" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
+def test_bundle_verifier_requires_two_unique_control_manifests(tmp_path: Path) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    provenance_path = bundle / "bench/results/provenance.json"
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    provenance["control_manifests"].append("bench/results/claims.json")
+    provenance_path.write_text(json.dumps(provenance), encoding="utf-8")
+
+    assert any(
+        "exactly two unique control manifests" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
+def test_bundle_verifier_rejects_comment_only_healthcheck(tmp_path: Path) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    dockerfile = bundle / "Dockerfile"
+    dockerfile.write_text(
+        dockerfile.read_text(encoding="utf-8").replace("HEALTHCHECK ", "# HEALTHCHECK "),
+        encoding="utf-8",
+    )
+
+    assert any(
+        "exactly one canonical active HEALTHCHECK" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
+def test_bundle_verifier_rejects_trailing_overriding_cmd(tmp_path: Path) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    dockerfile = bundle / "Dockerfile"
+    dockerfile.write_text(
+        dockerfile.read_text(encoding="utf-8") + '\nCMD ["python", "-m", "http.server"]\n',
+        encoding="utf-8",
+    )
+
+    assert any(
+        "final CMD must start the canonical Streamlit app" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
+def test_space_source_returns_violation_for_malformed_manifest(tmp_path: Path) -> None:
+    repo_root = clone_source_repo(tmp_path)
+    (repo_root / "space/bundle-manifest.json").write_text("{", encoding="utf-8")
+
+    violations = verify_space_source(repo_root)
+
+    assert violations == ["cannot export Space source: BundleManifestError"]
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        "https://example.test/?next=https://github.com/kuotunyu/local-inference-bench-gateway",
+        "plain https://github.com/kuotunyu/local-inference-bench-gateway text",
+    ],
+)
+def test_bundle_verifier_requires_exact_canonical_source_link(
+    tmp_path: Path, replacement: str
+) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    card_path = bundle / "README.md"
+    card_path.write_text(
+        card_path.read_text(encoding="utf-8").replace(
+            "https://github.com/kuotunyu/local-inference-bench-gateway", replacement
+        ),
+        encoding="utf-8",
+    )
+
+    assert any(
+        "must link the canonical source repository" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
+def test_bundle_verifier_rejects_case_insensitive_hf_space_hostname(tmp_path: Path) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    card_path = bundle / "README.md"
+    card_path.write_text(
+        card_path.read_text(encoding="utf-8") + "\n[hosted demo](https://demo.HF.SPACE)\n",
+        encoding="utf-8",
+    )
+
+    assert any(
+        "must not hard-code an ephemeral hf.space URL" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
     )
 
 

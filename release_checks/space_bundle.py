@@ -5,16 +5,17 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from urllib.parse import urlsplit
 
 import yaml
 
-from release_checks.docker_policy import BROAD_COPY_PATTERN
 from release_checks.publication import verify_publication
 from release_checks.space_imports import verify_public_import_boundary
 
@@ -36,6 +37,20 @@ _CONTROL_MANIFESTS = {
     "bench/results/claims.json",
     "bench/results/provenance.json",
 }
+_EVIDENCE_ARTIFACT_PATHS = {
+    "bench/results/concurrency_summary.csv",
+    "bench/results/gateway_overhead.json",
+    "bench/results/lmstudio_concurrency_boundary_scan.json",
+    "bench/results/lmstudio_concurrency_boundary_scan_unified_kv_on.json",
+    "bench/results/lmstudio_unified_kv_cache_comparison.png",
+    "bench/results/prefill_summary.csv",
+    "bench/results/prefill_time_vs_prompt_length.png",
+    "bench/results/prompts/prompt_2000.json",
+    "bench/results/prompts/prompt_8000.json",
+    "bench/results/throughput_vs_concurrency.png",
+    "bench/results/ttft_vs_concurrency.png",
+    "bench/results/vram_usage.png",
+}
 _REQUIRED_DEPENDENCIES = (
     "streamlit==1.61.1",
     "pandas==3.0.5",
@@ -48,10 +63,13 @@ _GPU_CONFIGURATION = re.compile(
     r"\b(?:cuda|nvidia-container-runtime)\b",
     re.IGNORECASE | re.MULTILINE,
 )
-_BROAD_JSON_COPY_PATTERN = re.compile(
-    r'^\s*(?:COPY|ADD)\s+(?:--[^\s]+\s+)*\[\s*"\."\s*,',
-    re.IGNORECASE | re.MULTILINE,
+_CANONICAL_HEALTHCHECK = """--interval=10s --timeout=3s --start-period=10s --retries=6 CMD ["python", "-c", "import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:7860/_stcore/health', timeout=2).read()"]"""
+_CANONICAL_CMD = (
+    '["streamlit", "run", "space/app.py", "--server.address=0.0.0.0", '
+    '"--server.port=7860", "--server.headless=true"]'
 )
+_CANONICAL_SOURCE_URL = "https://github.com/kuotunyu/local-inference-bench-gateway"
+_MARKDOWN_LINK = re.compile(r"(?<!!)\[[^\]]*\]\(\s*(?:<(?P<angle>[^>]+)>|(?P<plain>[^\s)]+))")
 
 
 class BundleManifestError(ValueError):
@@ -96,13 +114,11 @@ def _repo_path(repo_root: Path, relative: PurePosixPath, *, source: bool) -> Pat
     return path
 
 
-def load_bundle_manifest(repo_root: Path) -> tuple[BundleEntry, ...]:
-    """Load the explicit bundle allowlist while containing every path."""
-    manifest_path = _repo_path(repo_root, _MANIFEST_PATH, source=True)
+def _parse_bundle_manifest(repo_root: Path, manifest_bytes: bytes) -> tuple[BundleEntry, ...]:
     try:
-        document = json.loads(manifest_path.read_text(encoding="utf-8"))
+        document = json.loads(manifest_bytes.decode("utf-8"))
         entries = document["files"]
-    except (KeyError, OSError, TypeError, json.JSONDecodeError) as error:
+    except (KeyError, TypeError, UnicodeError, json.JSONDecodeError) as error:
         raise BundleManifestError("invalid bundle manifest") from error
     if not isinstance(entries, list):
         raise BundleManifestError("invalid bundle manifest")
@@ -120,6 +136,16 @@ def load_bundle_manifest(repo_root: Path) -> tuple[BundleEntry, ...]:
         seen_destinations.add(destination)
         bundle_entries.append(BundleEntry(source=source, destination=destination))
     return tuple(bundle_entries)
+
+
+def load_bundle_manifest(repo_root: Path) -> tuple[BundleEntry, ...]:
+    """Load the explicit bundle allowlist while containing every path."""
+    manifest_path = _repo_path(repo_root, _MANIFEST_PATH, source=True)
+    try:
+        manifest_bytes = manifest_path.read_bytes()
+    except OSError as error:
+        raise BundleManifestError("invalid bundle manifest") from error
+    return _parse_bundle_manifest(repo_root, manifest_bytes)
 
 
 def _ensure_empty_destination(destination: Path) -> None:
@@ -316,9 +342,7 @@ def _evidence_digest(path: Path) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _verify_evidence_bundle(
-    bundle_root: Path, expected_paths: set[str], violations: list[str]
-) -> None:
+def _verify_evidence_bundle(bundle_root: Path, violations: list[str]) -> None:
     provenance = _read_json(
         bundle_root / "bench" / "results" / "provenance.json",
         "evidence manifest",
@@ -329,17 +353,17 @@ def _verify_evidence_bundle(
     controls = provenance.get("control_manifests")
     if (
         not isinstance(controls, list)
+        or len(controls) != 2
         or not all(isinstance(item, str) for item in controls)
         or set(controls) != _CONTROL_MANIFESTS
     ):
-        violations.append("evidence control manifests do not match the required set")
+        violations.append("evidence control manifests must be exactly two unique control manifests")
         controls = []
     artifacts = provenance.get("artifacts")
     if not isinstance(artifacts, list):
         violations.append("evidence artifacts must be a list")
         return
 
-    evidence_paths = {item for item in controls if isinstance(item, str)}
     seen_artifacts: set[str] = set()
     for artifact in artifacts:
         if not isinstance(artifact, dict):
@@ -359,7 +383,6 @@ def _verify_evidence_bundle(
         if display in seen_artifacts:
             violations.append(f"duplicate evidence artifact: {display}")
         seen_artifacts.add(display)
-        evidence_paths.add(display)
         if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
             violations.append(f"invalid evidence digest: {display}")
             continue
@@ -374,57 +397,121 @@ def _verify_evidence_bundle(
         if actual_digest != digest:
             violations.append(f"evidence byte mismatch: {display}")
 
-    expected_evidence = {
-        relative for relative in expected_paths if relative.startswith("bench/results/")
-    }
-    if evidence_paths != expected_evidence:
-        violations.append("evidence paths do not match the bundle manifest")
+    if (
+        len(artifacts) != 12
+        or len(seen_artifacts) != 12
+        or seen_artifacts != _EVIDENCE_ARTIFACT_PATHS
+    ):
+        violations.append(
+            "evidence artifact declarations must be exactly 12 unique canonical paths"
+        )
+
+
+def _docker_instructions(dockerfile: str) -> list[tuple[str, str]]:
+    instructions: list[tuple[str, str]] = []
+    pending = ""
+    for raw_line in dockerfile.splitlines():
+        stripped = raw_line.strip()
+        if not pending and (not stripped or stripped.startswith("#")):
+            continue
+        pending = f"{pending} {stripped}".strip()
+        if pending.endswith("\\"):
+            pending = pending[:-1].rstrip()
+            continue
+        match = re.fullmatch(r"([A-Za-z]+)\s+(.+)", pending)
+        if match:
+            instructions.append((match.group(1).upper(), match.group(2).strip()))
+        pending = ""
+    if pending:
+        instructions.append(("INVALID", pending))
+    return instructions
+
+
+def _copy_sources(argument: str) -> list[str] | None:
+    remaining = argument.strip()
+    while remaining.startswith("--"):
+        parts = remaining.split(maxsplit=1)
+        if len(parts) != 2:
+            return None
+        remaining = parts[1]
+    if remaining.startswith("["):
+        try:
+            values = json.loads(remaining)
+        except json.JSONDecodeError:
+            return None
+        if (
+            not isinstance(values, list)
+            or len(values) < 2
+            or not all(isinstance(value, str) for value in values)
+        ):
+            return None
+        return values[:-1]
+    try:
+        values = shlex.split(remaining, posix=True)
+    except ValueError:
+        return None
+    return values[:-1] if len(values) >= 2 else None
+
+
+def _is_context_root(source: str) -> bool:
+    return PurePosixPath(source.replace("\\", "/")) == PurePosixPath(".")
 
 
 def _verify_dockerfile(bundle_root: Path, violations: list[str]) -> None:
     dockerfile = _read_text(bundle_root / "Dockerfile", "Space Dockerfile", violations)
     if not dockerfile:
         return
-    from_lines = re.findall(r"^\s*FROM\s+([^\s]+)", dockerfile, re.IGNORECASE | re.MULTILINE)
-    if from_lines != ["python:3.12.13-slim-bookworm"]:
+    instructions = _docker_instructions(dockerfile)
+    from_arguments = [argument for name, argument in instructions if name == "FROM"]
+    if from_arguments != ["python:3.12.13-slim-bookworm"]:
         violations.append("Space base image must be python:3.12.13-slim-bookworm")
-    user_lines = re.findall(r"^\s*USER\s+([^\s]+)", dockerfile, re.IGNORECASE | re.MULTILINE)
-    if not user_lines or user_lines[-1] != "10001:10001":
+    user_arguments = [argument for name, argument in instructions if name == "USER"]
+    if not user_arguments or user_arguments[-1] != "10001:10001":
         violations.append("Space runtime user must be 10001:10001")
-    if BROAD_COPY_PATTERN.search(dockerfile) or _BROAD_JSON_COPY_PATTERN.search(dockerfile):
-        violations.append("broad Docker COPY/ADD is forbidden")
-    if _GPU_CONFIGURATION.search(dockerfile):
+    for name, argument in instructions:
+        if name not in {"COPY", "ADD"}:
+            continue
+        sources = _copy_sources(argument)
+        if sources is None:
+            violations.append("invalid Docker COPY/ADD instruction")
+        elif any(_is_context_root(source) for source in sources):
+            violations.append("broad Docker COPY/ADD is forbidden")
+    active_dockerfile = "\n".join(f"{name} {argument}" for name, argument in instructions)
+    if _GPU_CONFIGURATION.search(active_dockerfile):
         violations.append("GPU configuration is forbidden in the Space Dockerfile")
-    if re.search(r"(?<!\d)9000(?!\d)", dockerfile):
+    if re.search(r"(?<!\d)9000(?!\d)", active_dockerfile):
         violations.append("gateway port 9000 is forbidden in the Space Dockerfile")
-    exposed = re.findall(r"^\s*EXPOSE\s+([^\s]+)", dockerfile, re.IGNORECASE | re.MULTILINE)
+    exposed = [argument for name, argument in instructions if name == "EXPOSE"]
     if exposed != ["7860"]:
         violations.append("Space Dockerfile must expose only port 7860")
-    required_tokens = (
-        "http://127.0.0.1:7860/_stcore/health",
-        'CMD ["streamlit", "run", "space/app.py", "--server.address=0.0.0.0", '
-        '"--server.port=7860", "--server.headless=true"]',
-    )
-    for token in required_tokens:
-        if token not in dockerfile:
-            violations.append(f"Space Dockerfile lacks required token: {token}")
+    healthchecks = [argument for name, argument in instructions if name == "HEALTHCHECK"]
+    if healthchecks != [_CANONICAL_HEALTHCHECK]:
+        violations.append("Space Dockerfile must have exactly one canonical active HEALTHCHECK")
+    commands = [argument for name, argument in instructions if name == "CMD"]
+    if not commands or commands[-1] != _CANONICAL_CMD:
+        violations.append("Space Dockerfile final CMD must start the canonical Streamlit app")
 
 
-def _verify_requirements(repo_root: Path, bundle_root: Path, violations: list[str]) -> None:
+def _verify_requirements(
+    lock_bytes: bytes | None, bundle_root: Path, violations: list[str]
+) -> None:
     requirements = _read_text(
         bundle_root / "requirements.txt", "Space requirements", violations
     ).splitlines()
     if requirements != list(_REQUIRED_DEPENDENCIES):
         violations.append("Space dependencies must be exactly pinned")
+    if lock_bytes is None:
+        violations.append("cannot verify Space dependencies against source-commit uv.lock")
+        return
     try:
-        lock = tomllib.loads((repo_root / "uv.lock").read_text(encoding="utf-8"))
+        lock = tomllib.loads(lock_bytes.decode("utf-8"))
         locked = {
             package["name"]: package["version"]
             for package in lock["package"]
             if package.get("name") in {"streamlit", "pandas", "altair"}
         }
-    except (KeyError, OSError, TypeError, UnicodeError, tomllib.TOMLDecodeError):
-        violations.append("cannot verify Space dependencies against uv.lock")
+    except (KeyError, TypeError, UnicodeError, tomllib.TOMLDecodeError):
+        violations.append("cannot verify Space dependencies against source-commit uv.lock")
         return
     if {f"{name}=={version}" for name, version in locked.items()} != set(_REQUIRED_DEPENDENCIES):
         violations.append("Space dependency pins do not match uv.lock")
@@ -448,16 +535,21 @@ def _verify_card(bundle_root: Path, violations: list[str]) -> None:
             violations.append("Space card app_port must be 7860")
         if metadata.get("license") != "mit":
             violations.append("Space card license must be mit")
-    for label, target in (
-        ("MIT License", "LICENSE"),
-        ("Third-party notices", "THIRD_PARTY_NOTICES.md"),
-    ):
-        if f"[{label}]({target})" not in card:
+    destinations = [
+        match.group("angle") or match.group("plain") for match in _MARKDOWN_LINK.finditer(card)
+    ]
+    for target in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
+        if target not in destinations:
             violations.append(f"Space card must link {target}")
-    if "https://github.com/kuotunyu/local-inference-bench-gateway" not in card:
+    if _CANONICAL_SOURCE_URL not in destinations:
         violations.append("Space card must link the canonical source repository")
-    if re.search(r"https://[^\s)]+\.hf\.space", card):
-        violations.append("Space card must not hard-code an ephemeral hf.space URL")
+    for destination in destinations:
+        hostname = urlsplit(destination).hostname
+        if hostname and (
+            hostname.casefold() == "hf.space" or hostname.casefold().endswith(".hf.space")
+        ):
+            violations.append("Space card must not hard-code an ephemeral hf.space URL")
+            break
 
 
 def verify_space_bundle(repo_root: Path, bundle_root: Path) -> list[str]:
@@ -465,34 +557,42 @@ def verify_space_bundle(repo_root: Path, bundle_root: Path) -> list[str]:
     repo_root = repo_root.resolve()
     bundle_root = bundle_root.resolve()
     violations: list[str] = []
-    try:
-        entries = load_bundle_manifest(repo_root)
-    except BundleManifestError as error:
-        return [f"invalid source bundle manifest: {error}"]
-
-    expected_paths = {entry.destination.as_posix() for entry in entries}
-    expected_paths.add(_DEPLOYMENT_MANIFEST_PATH.as_posix())
     actual_paths = _actual_bundle_paths(bundle_root, violations)
-    for relative in sorted(expected_paths - actual_paths):
-        violations.append(f"missing required bundle file: {relative}")
-    for relative in sorted(actual_paths - expected_paths):
-        violations.append(f"undeclared bundle file: {relative}")
+    if _DEPLOYMENT_MANIFEST_PATH.as_posix() not in actual_paths:
+        violations.append(f"missing required bundle file: {_DEPLOYMENT_MANIFEST_PATH.as_posix()}")
 
     violations.extend(verify_publication(bundle_root, export_mode=True))
     deployment = _deployment_document(bundle_root, violations)
     source_commit = deployment.get("source_commit") if deployment else None
+    lock_bytes: bytes | None = None
     if not isinstance(source_commit, str) or not _SOURCE_COMMIT.fullmatch(source_commit):
         violations.append("invalid source revision")
     elif not _commit_exists(repo_root, source_commit):
         violations.append("source revision is unavailable in the repository")
     else:
         assert deployment is not None
+        manifest_bytes = _committed_bytes(repo_root, source_commit, _MANIFEST_PATH)
+        if manifest_bytes is None:
+            violations.append(f"missing source commit file: {_MANIFEST_PATH.as_posix()}")
+        else:
+            try:
+                entries = _parse_bundle_manifest(repo_root, manifest_bytes)
+            except BundleManifestError as error:
+                violations.append(f"invalid source-commit bundle manifest: {error}")
+            else:
+                expected_paths = {entry.destination.as_posix() for entry in entries}
+                expected_paths.add(_DEPLOYMENT_MANIFEST_PATH.as_posix())
+                for relative in sorted(expected_paths - actual_paths):
+                    violations.append(f"missing required bundle file: {relative}")
+                for relative in sorted(actual_paths - expected_paths):
+                    violations.append(f"undeclared bundle file: {relative}")
+                _verify_source_bytes(repo_root, bundle_root, entries, source_commit, violations)
         _verify_deployment_digests(repo_root, deployment, source_commit, violations)
-        _verify_source_bytes(repo_root, bundle_root, entries, source_commit, violations)
+        lock_bytes = _committed_bytes(repo_root, source_commit, PurePosixPath("uv.lock"))
 
-    _verify_evidence_bundle(bundle_root, expected_paths, violations)
+    _verify_evidence_bundle(bundle_root, violations)
     _verify_dockerfile(bundle_root, violations)
-    _verify_requirements(repo_root, bundle_root, violations)
+    _verify_requirements(lock_bytes, bundle_root, violations)
     _verify_card(bundle_root, violations)
     violations.extend(verify_public_import_boundary(bundle_root))
     return list(dict.fromkeys(violations))
@@ -515,5 +615,5 @@ def verify_space_source(repo_root: Path) -> list[str]:
             bundle_root = Path(temporary) / "bundle"
             export_space_bundle(repo_root, bundle_root, source_commit)
             return verify_space_bundle(repo_root, bundle_root)
-    except (BundleExportError, OSError) as error:
+    except (BundleExportError, BundleManifestError, OSError) as error:
         return [f"cannot export Space source: {type(error).__name__}"]
