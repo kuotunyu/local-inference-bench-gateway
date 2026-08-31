@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
+from typing import cast
 
 import httpx
 import pytest
@@ -39,6 +40,22 @@ class ScriptedRemote:
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
+
+
+class DirectResponseClient:
+    """Return a mocked response before HTTPX pre-processes redirect metadata."""
+
+    def __init__(self, response: httpx.Response) -> None:
+        self._response = response
+
+    def get(
+        self,
+        url: httpx.URL,
+        *,
+        headers: dict[str, str],
+        follow_redirects: bool,
+    ) -> httpx.Response:
+        return self._response
 
 
 def client_for(script: ScriptedRemote) -> httpx.Client:
@@ -236,6 +253,145 @@ def test_remote_gate_stops_when_declared_next_cursor_repeats() -> None:
             httpx.Response(
                 200,
                 json={"items": [], "next": repeated_url},
+            ),
+        ]
+    )
+
+    with client_for(script) as client, pytest.raises(RemoteGateError) as raised:
+        check_remote_gate(client, TOKEN)
+
+    assert raised.value.reason == "pagination_incomplete"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"items": [], "pagination": {"has_next": True, "next": None}},
+        {"items": [], "pagination": {"has_next": False, "next": "second-page"}},
+        {"items": [], "pagination": {"has_next": False, "cursor": "second-page"}},
+        {"items": [], "pagination": {"has_next": True, "next": ""}},
+        {
+            "items": [],
+            "pagination": {"has_next": True, "next": None, "cursor": "second-page"},
+        },
+        {
+            "items": [],
+            "pagination": {
+                "has_next": True,
+                "next": "second-page",
+                "next_cursor": "different-page",
+            },
+        },
+        {
+            "items": [],
+            "pagination": {
+                "has_next": True,
+                "cursor": "second-page",
+                "endCursor": "different-page",
+            },
+        },
+        {
+            "items": [],
+            "next": "second-page",
+            "pagination": {"has_next": True, "next": "different-page"},
+        },
+    ],
+    ids=[
+        "has-next-with-null-next",
+        "no-next-with-declared-cursor",
+        "no-next-with-cursor-fallback",
+        "has-next-with-empty-next",
+        "has-next-with-null-next-and-cursor",
+        "inconsistent-next-fields",
+        "inconsistent-cursor-fallbacks",
+        "inconsistent-top-level-and-pagination-next",
+    ],
+)
+def test_remote_gate_rejects_incomplete_or_contradictory_pagination_metadata(
+    payload: dict[str, object],
+) -> None:
+    script = ScriptedRemote([verified_owner(), missing_space(), httpx.Response(200, json=payload)])
+
+    with client_for(script) as client, pytest.raises(RemoteGateError) as raised:
+        check_remote_gate(client, TOKEN)
+
+    assert raised.value.reason == "pagination_incomplete"
+
+
+@pytest.mark.parametrize("cursor_field", ["cursor", "endCursor"])
+def test_remote_gate_follows_valid_cursor_fallback_when_has_next_is_true(
+    cursor_field: str,
+) -> None:
+    script = ScriptedRemote(
+        [
+            verified_owner(),
+            missing_space(),
+            httpx.Response(
+                200,
+                json={
+                    "items": [],
+                    "pagination": {"has_next": True, cursor_field: "second-page"},
+                },
+            ),
+            httpx.Response(200, json=[]),
+        ]
+    )
+
+    with client_for(script) as client:
+        decision = check_remote_gate(client, TOKEN)
+
+    assert decision.available is True
+    assert script.requests[-1].url.params["cursor"] == "second-page"
+
+
+def test_remote_gate_rejects_link_continuation_when_payload_declares_no_next() -> None:
+    next_url = f"{SPACES_URL}?author={OWNER}&cursor=second-page"
+    script = ScriptedRemote(
+        [
+            verified_owner(),
+            missing_space(),
+            httpx.Response(
+                200,
+                json={"items": [], "pagination": {"has_next": False}},
+                headers={"Link": f'<{next_url}>; rel="next"'},
+            ),
+        ]
+    )
+
+    with client_for(script) as client, pytest.raises(RemoteGateError) as raised:
+        check_remote_gate(client, TOKEN)
+
+    assert raised.value.reason == "pagination_incomplete"
+
+
+def test_remote_gate_maps_malformed_redirect_url_to_stable_remote_error() -> None:
+    client = cast(
+        httpx.Client,
+        DirectResponseClient(
+            httpx.Response(
+                302,
+                headers={"Location": "https://huggingface.co:bad/api/whoami-v2"},
+            )
+        ),
+    )
+
+    with pytest.raises(RemoteGateError) as raised:
+        check_remote_gate(client, TOKEN)
+
+    assert raised.value.reason == "remote_error"
+
+
+def test_remote_gate_maps_malformed_continuation_url_to_pagination_incomplete() -> None:
+    script = ScriptedRemote(
+        [
+            verified_owner(),
+            missing_space(),
+            httpx.Response(
+                200,
+                json={
+                    "items": [],
+                    "next": "https://huggingface.co:bad/api/spaces",
+                },
             ),
         ]
     )
