@@ -469,6 +469,53 @@ def test_bundle_verifier_rejects_hf_space_in_rendered_url_forms(
     )
 
 
+def test_inline_code_comment_markers_do_not_hide_visible_hf_space_url(tmp_path: Path) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    card_path = bundle / "README.md"
+    card_path.write_text(
+        card_path.read_text(encoding="utf-8") + "\n`<!--` https://demo.HF.SPACE/path `-->`\n",
+        encoding="utf-8",
+    )
+
+    assert any(
+        "must not hard-code an ephemeral hf.space URL" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
+def test_unclosed_html_comment_cannot_supply_canonical_source_link(tmp_path: Path) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    card_path = bundle / "README.md"
+    card = card_path.read_text(encoding="utf-8")
+    assert CANONICAL_SOURCE_LINK in card
+    card_path.write_text(
+        card.replace(
+            CANONICAL_SOURCE_LINK,
+            f"<!-- [source]({CANONICAL_SOURCE_URL})",
+        ),
+        encoding="utf-8",
+    )
+
+    assert any(
+        "must link the canonical source repository" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
+def test_real_html_comment_hides_hf_space_url(tmp_path: Path) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    card_path = bundle / "README.md"
+    card_path.write_text(
+        card_path.read_text(encoding="utf-8") + "\n<!-- https://demo.HF.SPACE/path -->\n",
+        encoding="utf-8",
+    )
+
+    assert not any(
+        "must not hard-code an ephemeral hf.space URL" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
 def test_valid_exported_bundle_passes_every_policy(tmp_path: Path) -> None:
     bundle = export_valid_bundle(tmp_path)
     actual_paths = {
