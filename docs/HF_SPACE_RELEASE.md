@@ -76,6 +76,13 @@ For both viewports, record each of these visual and claim checks:
 - The scoped `LICENSE` and `THIRD_PARTY_NOTICES.md` links are present and readable.
 - The Space sleep/cold-start disclosure is present and does not describe Gateway uptime.
 
+For each viewport, capture an unintercepted CDP or Playwright request graph while visiting all four
+views. Preserve the original full URL, resource type, and initiator metadata for every request
+outside the allowed boundary. Only loopback and same-origin runtime requests are permitted. Require
+exactly zero external origins. Any external origin, including `data.streamlit.io` and Fivetran, is
+RED. Do not block, abort, intercept, rewrite, or fulfill requests to make this gate pass. Preserve
+the graph evidence and stop if the boundary is violated.
+
 Retain screenshots only under ignored `.dashboard-cache/space-visual/valid/`. Remove the exact
 valid-review container after inspection, but retain the reviewed bundle until the tamper gate below
 finishes.
@@ -94,6 +101,13 @@ loopback port. Inspect only `Committed Benchmark Evidence` at exact `1440x900` a
 - The canonical `Gateway median TTFT overhead: 1.66 ms` value is suppressed.
 - Independently verified, unaffected panels remain readable.
 - Zero browser-console errors and zero Streamlit exceptions are present.
+
+For each viewport, capture an unintercepted CDP or Playwright request graph while reviewing the
+tampered evidence view. Preserve the original full URL, resource type, and initiator metadata for
+every request outside the allowed boundary. Only loopback and same-origin runtime requests are
+permitted. Require exactly zero external origins. Any external origin, including
+`data.streamlit.io` and Fivetran, is RED. Do not block, abort, intercept, rewrite, or fulfill
+requests to make this gate pass. Preserve the graph evidence and stop if the boundary is violated.
 
 Retain screenshots only under ignored `.dashboard-cache/space-visual/NEVER_DEPLOY/`. Remove the
 exact disposable container, then resolve and validate both task-owned roots before recursive

@@ -67,6 +67,35 @@ def test_release_runbook_contains_every_claim_and_visual_gate() -> None:
     assert "suppressed" in text
 
 
+def test_release_runbook_requires_unintercepted_zero_external_request_graphs() -> None:
+    text = _runbook_text()
+    valid_gate = text[
+        text.index("## 2. Local valid-bundle visual review") : text.index(
+            "## 3. Local fail-closed NEVER_DEPLOY review"
+        )
+    ]
+    never_deploy_gate = text[
+        text.index("## 3. Local fail-closed NEVER_DEPLOY review") : text.index(
+            "## 4. Authenticated collision preflight"
+        )
+    ]
+    required_instructions = (
+        "unintercepted CDP or Playwright request graph",
+        "original full URL",
+        "resource type",
+        "initiator metadata",
+        "Only loopback and same-origin runtime requests are permitted",
+        "Require exactly zero external origins",
+        "Any external origin, including `data.streamlit.io` and Fivetran, is RED",
+        "Do not block, abort, intercept, rewrite, or fulfill requests",
+    )
+
+    for gate in (valid_gate, never_deploy_gate):
+        normalized_gate = " ".join(gate.split())
+        for instruction in required_instructions:
+            assert instruction in normalized_gate
+
+
 def test_release_runbook_keeps_remote_writes_behind_stops() -> None:
     text = _runbook_text()
     remote_gate = text.index("uv run --frozen python -m release_checks.space_remote_gate")
