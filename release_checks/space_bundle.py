@@ -72,8 +72,6 @@ _CANONICAL_SOURCE_URL = "https://github.com/kuotunyu/local-inference-bench-gatew
 _MARKDOWN_LINK = re.compile(r"(?<!!)\[[^\]]*\]\(\s*(?:<(?P<angle>[^>]+)>|(?P<plain>[^\s)]+))")
 _MARKDOWN_AUTOLINK = re.compile(r"<(?P<url>https?://[^<>\s]+)>", re.IGNORECASE)
 _VISIBLE_URL = re.compile(r"(?i)(?:https?:)?//[^\s<>\])}]+")
-_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-_INLINE_CODE = re.compile(r"(`+).*?\1", re.DOTALL)
 
 
 class BundleManifestError(ValueError):
@@ -526,11 +524,52 @@ def _verify_requirements(
         violations.append("Space dependency pins do not match uv.lock")
 
 
+def _code_span_end(markdown: str, start: int) -> int | None:
+    length = 1
+    while start + length < len(markdown) and markdown[start + length] == "`":
+        length += 1
+    marker = "`" * length
+    search_from = start + length
+    while (closing := markdown.find(marker, search_from)) != -1:
+        before_is_tick = closing > 0 and markdown[closing - 1] == "`"
+        after = closing + length
+        after_is_tick = after < len(markdown) and markdown[after] == "`"
+        if not before_is_tick and not after_is_tick:
+            return after
+        search_from = after
+    return None
+
+
+def _strip_comments_and_inline_code(markdown: str) -> str:
+    rendered: list[str] = []
+    index = 0
+    in_comment = False
+    while index < len(markdown):
+        if in_comment:
+            closing = markdown.find("-->", index)
+            if closing == -1:
+                break
+            index = closing + 3
+            in_comment = False
+            continue
+        if markdown.startswith("<!--", index):
+            in_comment = True
+            index += 4
+            continue
+        if markdown[index] == "`":
+            closing = _code_span_end(markdown, index)
+            if closing is not None:
+                index = closing
+                continue
+        rendered.append(markdown[index])
+        index += 1
+    return "".join(rendered)
+
+
 def _rendered_markdown(card: str) -> str:
-    without_comments = _HTML_COMMENT.sub("", card)
     rendered_lines: list[str] = []
     fence: tuple[str, int] | None = None
-    for line in without_comments.splitlines():
+    for line in card.splitlines():
         stripped = line.lstrip()
         indent = len(line) - len(stripped)
         if fence is not None:
@@ -547,7 +586,7 @@ def _rendered_markdown(card: str) -> str:
         if indent >= 4:
             continue
         rendered_lines.append(line)
-    return _INLINE_CODE.sub("", "\n".join(rendered_lines))
+    return _strip_comments_and_inline_code("\n".join(rendered_lines))
 
 
 def _rendered_link_destinations(card: str) -> tuple[str, list[str]]:
