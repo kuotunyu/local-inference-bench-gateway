@@ -310,6 +310,8 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
         _render_measure_key("line", "TTFT／ms")
         st.altair_chart(build_ttft_chart(evidence.concurrency), width="stretch")
         st.caption("milliseconds · series label 標示 percentile · 數值越低越好")
+    else:
+        render_state_message(INTEGRITY_FAILURE, "concurrency_summary.csv 無法讀取。", "warning")
 
     prefill_col, overhead_col = st.columns([1.2, 1], gap="large")
     with prefill_col:
@@ -346,6 +348,8 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
             st.caption(
                 "MiB · measured baseline，並非模型品質或跨硬體效率排名；不同 frontend 採用不同 memory strategy。"
             )
+        else:
+            render_state_message(INTEGRITY_FAILURE, "concurrency_summary.csv 無法讀取。", "warning")
     with kv_col:
         st.markdown("### LM Studio · Unified KV Cache 控制")
         if evidence.kv_cache_off and evidence.kv_cache_on:
