@@ -52,6 +52,7 @@ jobs:
 
       - name: Smoke public Space without network
         run: |
+          set -euo pipefail
           docker run -d --name local-inference-space-smoke --network none local-inference-bench-gateway-space:rc
           runtime_user="$(docker inspect --format '{{.Config.User}}' local-inference-space-smoke)"
           test "$runtime_user" = "10001:10001"
@@ -69,7 +70,8 @@ jobs:
             docker logs local-inference-space-smoke >&2
             exit 1
           fi
-          ! docker exec local-inference-space-smoke find /app -type f \( -name '*.db' -o -name '*.sqlite*' -o -name '*.gguf' -o -name '*.safetensors' -o -name '*.onnx' -o -name '*.jsonl' \) | grep .
+          forbidden="$(docker exec local-inference-space-smoke find /app -type f \( -name '*.db' -o -name '*.sqlite*' -o -name '*.gguf' -o -name '*.safetensors' -o -name '*.onnx' -o -name '*.jsonl' \))"
+          test -z "$forbidden"
 
       - name: Always capture public Space logs
         if: always()
