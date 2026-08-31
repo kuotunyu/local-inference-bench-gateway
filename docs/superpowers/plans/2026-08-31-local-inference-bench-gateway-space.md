@@ -20,6 +20,9 @@
 - Docker metadata is `sdk: docker`, `app_port: 7860`; base image is `python:3.12.13-slim-bookworm`; runtime user is `10001:10001`.
 - Direct Space dependencies are exactly `streamlit==1.61.1`, `pandas==3.0.5`, and `altair==6.2.2`, each matching `uv.lock`.
 - Runtime works with outbound networking disabled; only the container-local Streamlit health probe is permitted.
+- Browser request graphs are captured without blocking or interception; only loopback and
+  same-origin runtime requests are permitted, and `data.streamlit.io`, Fivetran, or any other
+  external origin is RED.
 - Visual acceptance uses exact `1440x900` desktop and `390x844` mobile viewports.
 - No task creates, uploads, modifies, deletes, or restarts a Hugging Face Space; pushes, PRs, merges, About edits, and visibility changes are forbidden.
 - Every product or document correction follows observed RED, minimal GREEN, focused regression checks, and a new task-specific commit; Task 11 may commit adversarial tests after a first-run GREEN because it characterizes a contract implemented by Tasks 1–10, and Task 14 is verification-only.
@@ -606,6 +609,7 @@ def test_space_assets_pin_public_runtime() -> None:
     assert "FROM python:3.12.13-slim-bookworm" in dockerfile
     assert "USER 10001:10001" in dockerfile
     assert "COPY . ." not in dockerfile
+    assert "COPY .streamlit/config.toml /app/.streamlit/config.toml" in dockerfile
     assert "uvicorn" not in dockerfile.lower()
     assert "9000" not in dockerfile
 ```
@@ -635,6 +639,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/tmp
 WORKDIR /app
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+COPY .streamlit/config.toml /app/.streamlit/config.toml
 COPY space/app.py ./space/app.py
 COPY dashboard ./dashboard
 COPY bench/results ./bench/results
@@ -647,7 +652,9 @@ CMD ["streamlit", "run", "space/app.py", "--server.address=0.0.0.0", "--server.p
 
 The source Dockerfile uses explicit public directories; the exporter in Task 7 guarantees that
 those directories contain only manifest entries. Configure `gatherUsageStats = false` and the
-approved Morandi theme in `space/.streamlit/config.toml`.
+approved Morandi theme in `space/.streamlit/config.toml`, then copy that one file exactly to
+`/app/.streamlit/config.toml`. A broad `COPY` or `CMD`-only hiding of telemetry is not an acceptable
+substitute for the exact config copy.
 
 - [ ] **Step 4: Run asset GREEN**
 
@@ -1335,6 +1342,8 @@ the table stops the task for a plan revision.
 **Files:**
 - Create: `docs/HF_SPACE_RELEASE.md`
 - Create: `tests/space/test_release_runbook.py`
+- Correct only after an observed request-graph RED: `tests/space/test_space_assets.py`
+- Correct only after an observed request-graph RED: `space/Dockerfile`
 - Correct only after an observed visual RED: `tests/space/test_public_app.py`
 - Correct only after an observed visual RED: `tests/space/test_public_app_isolation.py`
 - Correct only after an observed visual RED: `tests/dashboard/test_public_evidence.py`
@@ -1377,7 +1386,11 @@ truth-contract copy, a valid-bundle `12/12` evidence-status check, valid-bundle 
 absence check, endpoint-URL absence check, Live-selector absence check,
 model/GPU-current-execution claim absence check, browser-console error check, horizontal-overflow
 check, license and notices checks, Space sleep/cold-start check, and the separate tampered-bundle
-warning/value-suppression check. Define `test_release_runbook_keeps_remote_writes_behind_stops`;
+warning/value-suppression check. Also assert that both valid and tampered gates record the original
+full URL, resource type, and initiator metadata for every non-loopback origin without blocking or
+interception; permit only loopback and same-origin runtime requests and make
+`data.streamlit.io`, Fivetran, or any other external origin RED. Define
+`test_release_runbook_keeps_remote_writes_behind_stops`;
 assert the first write-capable operation is after the creation authorization stop, the About
 mutation is after its separate authorization stop, and final About API readback follows the mutation.
 
@@ -1411,7 +1424,9 @@ The runbook requires the operator to verify `$bundle` is the nonexistent child o
 GUID-named directory. Place the real remote-gate command after all local checks and immediately
 before the explicit creation stop. State that the gate performs GET only and that implementation
 agents never execute it without owner credentials and authority. State that paths containing
-`NEVER_DEPLOY` are prohibited inputs to every remote command.
+`NEVER_DEPLOY` are prohibited inputs to every remote command. The local runbook also requires an
+unintercepted CDP or Playwright request graph for each visual gate, with original URLs, resource
+types, and initiators retained as evidence and zero non-loopback or cross-origin runtime requests.
 
 - [ ] **Step 4: Run focused runbook GREEN**
 
@@ -1479,6 +1494,10 @@ At both `1440x900` and `390x844`, inspect all four views and require:
 5. Charts, legends, tooltips, table columns, and navigation are readable.
 6. The evidence page reports `12/12` verified artifacts and displays no degraded-evidence warning.
 7. Browser console and Streamlit exception counts are both zero.
+8. At each viewport, record every request made while visiting all four views. Preserve the original
+   full URL, resource type, and initiator metadata for each non-loopback origin. Do not block,
+   intercept, rewrite, or fulfill a request. Require zero non-loopback or cross-origin runtime
+   requests; `data.streamlit.io`, Fivetran, and every other external origin are RED.
 
 Save optional screenshots only under ignored `.dashboard-cache/space-visual/valid/`. Then run
 `docker rm -f local-inference-space-visual-valid`, require exit 0, and do not remove `$reviewRoot`
@@ -1507,7 +1526,10 @@ Wait-SpaceContainerHealth 'local-inference-space-visual-tampered'
 Inspect only the evidence view at `http://127.0.0.1:7861` using `1440x900` and `390x844`. Require
 `Unavailable — evidence integrity check failed`,
 require the canonical `Gateway median TTFT overhead: 1.66 ms` claim to be absent, require unaffected
-verified panels to remain readable, and require zero console or Streamlit exceptions. Save optional
+verified panels to remain readable, and require zero console or Streamlit exceptions. At each
+viewport, capture the unintercepted request graph with original full URLs, resource types, and
+initiator metadata; require zero non-loopback or cross-origin runtime requests, treating
+`data.streamlit.io`, Fivetran, or any other external origin as RED. Save optional
 screenshots only under ignored `.dashboard-cache/space-visual/NEVER_DEPLOY/`. Never pass
 `$tamperedBundle`, its image tag, or its container to a remote command.
 
@@ -1548,11 +1570,30 @@ run the same test plus Steps 4, 6, and 7 to GREEN:
 | fail-closed warning or canonical value leak | `tests/space/test_public_app_isolation.py` or `tests/dashboard/test_public_evidence.py` | `dashboard/data/public_evidence.py` or `dashboard/views/evidence.py` |
 | desktop/mobile overflow or unreadable responsive rule | `tests/dashboard/test_theme.py` | `dashboard/theme.py` |
 | runbook claim or ordering defect | `tests/space/test_release_runbook.py` | `docs/HF_SPACE_RELEASE.md` |
+| browser request graph contains a non-loopback or cross-origin request | `tests/space/test_space_assets.py` and `tests/space/test_release_runbook.py` | `space/Dockerfile` and `docs/HF_SPACE_RELEASE.md` |
 
 Review `git status --short`, `git diff --check`, and `git diff --` for the exact row's paths. Stage
 only the reviewed test and correction paths and commit with
 `git commit -m "fix: correct public Space visual acceptance defect"`. Prove the corrective HEAD is
 clean before re-exporting. A required path outside the table stops the task for a plan revision.
+
+For the observed Streamlit/Fivetran request-graph RED, preserve the pre-fix graph with every
+external original URL, resource type, and initiator. Do not fake GREEN by blocking, intercepting,
+rewriting, or fulfilling the requests. Before any product, test, or runbook correction, commit only
+the governing design and plan update and obtain a fresh review of that docs-only commit.
+
+After fresh review, add regressions in exactly `tests/space/test_space_assets.py` and
+`tests/space/test_release_runbook.py`. The asset regression requires the literal
+`COPY .streamlit/config.toml /app/.streamlit/config.toml`, rejects broad-copy instructions, and
+rejects `CMD`-only hiding of telemetry. The runbook regression requires unintercepted valid and
+tampered request graphs with zero non-loopback or cross-origin requests. Run both focused tests and
+record RED before changing exactly `space/Dockerfile` and `docs/HF_SPACE_RELEASE.md`; then run both
+focused tests to GREEN. Review and stage exactly those four paths and create a new corrective commit
+without amending the existing `docs: add public Space release gates` commit. From that clean new
+HEAD, re-run Step 4, re-export rather than altering the retained bundle, and re-run all of Steps 6
+and 7. Both visual gates must preserve the request-graph evidence, report zero external requests at
+both viewports, pass their visual assertions, remove only preflight-proven task-owned containers,
+images, and temporary copies, and finish with a clean HEAD.
 
 ---
 
@@ -1600,11 +1641,16 @@ Start the same verified bundle as `local-inference-space-final-visual` with
 `127.0.0.1:7860:7860`. Apply the identical 45-attempt/55-second health bounds. At `1440x900` and
 `390x844`, visit all four views; require the truth contract before controls, correct badges,
 `12/12` verified evidence without a degraded warning, zero horizontal overflow, zero browser-console
-errors, and zero Streamlit exceptions. Create a separate `NEVER_DEPLOY-hf-space-tampered` copy,
+errors, zero Streamlit exceptions, and an unintercepted request graph with zero non-loopback or
+cross-origin runtime requests. Preserve original full URLs, resource types, and initiators for any
+failure. Create a separate `NEVER_DEPLOY-hf-space-tampered` copy,
 append one LF byte only to `bench/results/gateway_overhead.json`, and require the verifier to report
 exactly one evidence-byte mismatch. Run that copy only as
 `local-inference-space-final-tampered` on `127.0.0.1:7861:7860`; require the fail-closed warning and
 absence of `Gateway median TTFT overhead: 1.66 ms` at both viewports. Remove both exact containers.
+Capture the same unintercepted request graph for the tampered gate at both viewports and require
+zero non-loopback or cross-origin runtime requests. Never block or intercept telemetry to satisfy
+either request-graph gate.
 Before recursively removing the task-created temporary roots, resolve each absolute path, require
 its parent to equal the OS temp directory, and require its leaf to parse as a GUID.
 
