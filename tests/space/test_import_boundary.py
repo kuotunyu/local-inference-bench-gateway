@@ -265,6 +265,11 @@ def test_real_exported_bundle_has_zero_import_boundary_violations(tmp_path: Path
     export_space_bundle(Path.cwd(), bundle_root, "a" * 40)
 
     assert verify_public_import_boundary(bundle_root) == []
+    exported_python = tuple(
+        PurePosixPath(path.relative_to(bundle_root).as_posix())
+        for path in sorted(bundle_root.rglob("*.py"))
+    )
+    assert public_import_closure(bundle_root) == exported_python
 
 
 def test_documentation_words_are_not_capability_violations(tmp_path: Path) -> None:
