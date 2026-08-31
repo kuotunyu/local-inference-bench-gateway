@@ -110,6 +110,17 @@ def test_space_streamlit_config_disables_usage_stats_and_uses_morandi_theme() ->
     assert "address" not in config.get("server", {})
 
 
+def test_space_dockerfile_installs_disabled_usage_stats_config() -> None:
+    config = tomllib.loads((SPACE_ROOT / ".streamlit" / "config.toml").read_text(encoding="utf-8"))
+    dockerfile = (SPACE_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    copy_instructions = [line for line in dockerfile.splitlines() if line.startswith("COPY ")]
+
+    assert config["browser"]["gatherUsageStats"] is False
+    assert "COPY .streamlit/config.toml /app/.streamlit/config.toml" in copy_instructions
+    assert not any(line.startswith(("COPY . ", "COPY ./ ")) for line in copy_instructions)
+    assert "--browser.gatherUsageStats" not in dockerfile
+
+
 def test_space_card_states_every_public_truth_boundary() -> None:
     card = (SPACE_ROOT / "README.md").read_text(encoding="utf-8")
 

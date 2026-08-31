@@ -7,6 +7,7 @@ WORKDIR /app
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY .streamlit/config.toml /app/.streamlit/config.toml
 COPY space/app.py ./space/app.py
 COPY dashboard ./dashboard
 COPY bench/results ./bench/results
