@@ -17,6 +17,8 @@ from release_checks.space_bundle import (
 from tests.space.test_exporter import expected_bundle_paths
 
 Mutation = Callable[[Path], None]
+CANONICAL_SOURCE_URL = "https://github.com/kuotunyu/local-inference-bench-gateway"
+CANONICAL_SOURCE_LINK = f"[`kuotunyu/local-inference-bench-gateway`]({CANONICAL_SOURCE_URL})"
 
 
 def _head_revision(repo_root: Path = Path.cwd()) -> str:
@@ -45,6 +47,22 @@ def clone_source_repo(tmp_path: Path) -> Path:
         check=True,
     )
     return repo_root
+
+
+def commit_file(repo_root: Path, relative: str) -> None:
+    for args in (
+        ("config", "user.name", "Bundle verifier test"),
+        ("config", "user.email", "bundle-verifier@example.invalid"),
+        ("add", "--", relative),
+        ("commit", "-m", "hostile manifest fixture"),
+    ):
+        subprocess.run(
+            ["git", *args],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
 
 
 def _write(bundle: Path, relative: str, content: str | bytes) -> None:
@@ -285,6 +303,31 @@ def test_bundle_verifier_requires_two_unique_control_manifests(tmp_path: Path) -
     )
 
 
+@pytest.mark.parametrize(
+    "omitted",
+    [
+        "bench/results/gateway_overhead.json",
+        "bench/results/claims.json",
+    ],
+)
+def test_bundle_verifier_requires_canonical_evidence_files_even_if_commit_omits_them(
+    tmp_path: Path, omitted: str
+) -> None:
+    repo_root = clone_source_repo(tmp_path)
+    manifest_path = repo_root / "space/bundle-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"] = [entry for entry in manifest["files"] if entry["destination"] != omitted]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    commit_file(repo_root, "space/bundle-manifest.json")
+    bundle = tmp_path / "bundle"
+    export_space_bundle(repo_root, bundle, _head_revision(repo_root))
+
+    assert any(
+        f"missing canonical evidence file: {omitted}" in item
+        for item in verify_space_bundle(repo_root, bundle)
+    )
+
+
 def test_bundle_verifier_rejects_comment_only_healthcheck(tmp_path: Path) -> None:
     bundle = export_valid_bundle(tmp_path)
     dockerfile = bundle / "Dockerfile"
@@ -352,6 +395,71 @@ def test_bundle_verifier_rejects_case_insensitive_hf_space_hostname(tmp_path: Pa
     card_path = bundle / "README.md"
     card_path.write_text(
         card_path.read_text(encoding="utf-8") + "\n[hosted demo](https://demo.HF.SPACE)\n",
+        encoding="utf-8",
+    )
+
+    assert any(
+        "must not hard-code an ephemeral hf.space URL" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        f"<!-- [source]({CANONICAL_SOURCE_URL}) -->",
+        f"`[source]({CANONICAL_SOURCE_URL})`",
+        f"```text\n[source]({CANONICAL_SOURCE_URL})\n```",
+    ],
+    ids=("html-comment", "inline-code", "fenced-code"),
+)
+def test_bundle_verifier_requires_rendered_canonical_source_link(
+    tmp_path: Path, replacement: str
+) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    card_path = bundle / "README.md"
+    card = card_path.read_text(encoding="utf-8")
+    assert CANONICAL_SOURCE_LINK in card
+    card_path.write_text(card.replace(CANONICAL_SOURCE_LINK, replacement), encoding="utf-8")
+
+    assert any(
+        "must link the canonical source repository" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
+def test_bundle_verifier_accepts_canonical_source_autolink(tmp_path: Path) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    card_path = bundle / "README.md"
+    card = card_path.read_text(encoding="utf-8")
+    assert CANONICAL_SOURCE_LINK in card
+    card_path.write_text(
+        card.replace(CANONICAL_SOURCE_LINK, f"<{CANONICAL_SOURCE_URL}>"),
+        encoding="utf-8",
+    )
+
+    assert not any(
+        "must link the canonical source repository" in item
+        for item in verify_space_bundle(Path.cwd(), bundle)
+    )
+
+
+@pytest.mark.parametrize(
+    "hostile_url",
+    [
+        "https://demo.HF.SPACE/path",
+        "<https://demo.HF.SPACE/path>",
+        "[hosted demo](https://demo.HF.SPACE./path)",
+    ],
+    ids=("plain", "autolink", "inline-trailing-dot"),
+)
+def test_bundle_verifier_rejects_hf_space_in_rendered_url_forms(
+    tmp_path: Path, hostile_url: str
+) -> None:
+    bundle = export_valid_bundle(tmp_path)
+    card_path = bundle / "README.md"
+    card_path.write_text(
+        card_path.read_text(encoding="utf-8") + f"\n{hostile_url}\n",
         encoding="utf-8",
     )
 

@@ -70,6 +70,10 @@ _CANONICAL_CMD = (
 )
 _CANONICAL_SOURCE_URL = "https://github.com/kuotunyu/local-inference-bench-gateway"
 _MARKDOWN_LINK = re.compile(r"(?<!!)\[[^\]]*\]\(\s*(?:<(?P<angle>[^>]+)>|(?P<plain>[^\s)]+))")
+_MARKDOWN_AUTOLINK = re.compile(r"<(?P<url>https?://[^<>\s]+)>", re.IGNORECASE)
+_VISIBLE_URL = re.compile(r"(?i)(?:https?:)?//[^\s<>\])}]+")
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+_INLINE_CODE = re.compile(r"(`+).*?\1", re.DOTALL)
 
 
 class BundleManifestError(ValueError):
@@ -343,6 +347,11 @@ def _evidence_digest(path: Path) -> str:
 
 
 def _verify_evidence_bundle(bundle_root: Path, violations: list[str]) -> None:
+    for relative in sorted(_CONTROL_MANIFESTS | _EVIDENCE_ARTIFACT_PATHS):
+        path = bundle_root.joinpath(*PurePosixPath(relative).parts)
+        if not path.is_file() or path.is_symlink():
+            violations.append(f"missing canonical evidence file: {relative}")
+
     provenance = _read_json(
         bundle_root / "bench" / "results" / "provenance.json",
         "evidence manifest",
@@ -517,6 +526,47 @@ def _verify_requirements(
         violations.append("Space dependency pins do not match uv.lock")
 
 
+def _rendered_markdown(card: str) -> str:
+    without_comments = _HTML_COMMENT.sub("", card)
+    rendered_lines: list[str] = []
+    fence: tuple[str, int] | None = None
+    for line in without_comments.splitlines():
+        stripped = line.lstrip()
+        indent = len(line) - len(stripped)
+        if fence is not None:
+            marker, length = fence
+            closing = re.match(rf"{re.escape(marker)}{{{length},}}", stripped)
+            if closing and not stripped[closing.end() :].strip():
+                fence = None
+            continue
+        opening = re.match(r"(`{3,}|~{3,})", stripped)
+        if indent <= 3 and opening:
+            marker = opening.group(1)
+            fence = (marker[0], len(marker))
+            continue
+        if indent >= 4:
+            continue
+        rendered_lines.append(line)
+    return _INLINE_CODE.sub("", "\n".join(rendered_lines))
+
+
+def _rendered_link_destinations(card: str) -> tuple[str, list[str]]:
+    rendered = _rendered_markdown(card)
+    destinations = [
+        match.group("angle") or match.group("plain") for match in _MARKDOWN_LINK.finditer(rendered)
+    ]
+    destinations.extend(match.group("url") for match in _MARKDOWN_AUTOLINK.finditer(rendered))
+    return rendered, destinations
+
+
+def _is_hf_space_url(value: str) -> bool:
+    hostname = urlsplit(value.rstrip(".,;:!?"), scheme="https").hostname
+    if not hostname:
+        return False
+    normalized = hostname.rstrip(".").casefold()
+    return normalized == "hf.space" or normalized.endswith(".hf.space")
+
+
 def _verify_card(bundle_root: Path, violations: list[str]) -> None:
     card = _read_text(bundle_root / "README.md", "Space card", violations)
     if not card:
@@ -535,19 +585,15 @@ def _verify_card(bundle_root: Path, violations: list[str]) -> None:
             violations.append("Space card app_port must be 7860")
         if metadata.get("license") != "mit":
             violations.append("Space card license must be mit")
-    destinations = [
-        match.group("angle") or match.group("plain") for match in _MARKDOWN_LINK.finditer(card)
-    ]
+    rendered, destinations = _rendered_link_destinations(card)
     for target in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
         if target not in destinations:
             violations.append(f"Space card must link {target}")
     if _CANONICAL_SOURCE_URL not in destinations:
         violations.append("Space card must link the canonical source repository")
-    for destination in destinations:
-        hostname = urlsplit(destination).hostname
-        if hostname and (
-            hostname.casefold() == "hf.space" or hostname.casefold().endswith(".hf.space")
-        ):
+    visible_urls = [match.group(0) for match in _VISIBLE_URL.finditer(rendered)]
+    for destination in (*destinations, *visible_urls):
+        if _is_hf_space_url(destination):
             violations.append("Space card must not hard-code an ephemeral hf.space URL")
             break
 
