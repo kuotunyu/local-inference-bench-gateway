@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import stat
 import subprocess
-import time
 from pathlib import Path
 
 import yaml
+
+BOUNDED_MODULE = "release_checks.bounded_command"
 
 
 def _workflow_steps() -> dict[str, dict[str, object]]:
@@ -24,11 +24,17 @@ def _space_smoke_run() -> str:
 
 
 def _shortened_smoke_run(
-    *, deadline_ms: int, probe_timeout_ms: int, sleep_ms: int, attempt_limit: int
+    *,
+    deadline_ms: int,
+    minimum_probe_ms: int,
+    probe_timeout_ms: int,
+    sleep_ms: int,
+    attempt_limit: int,
 ) -> str:
     smoke_run = _space_smoke_run()
     replacements = {
         "health_deadline_ms=55000": f"health_deadline_ms={deadline_ms}",
+        "health_minimum_probe_ms=1000": f"health_minimum_probe_ms={minimum_probe_ms}",
         "health_probe_timeout_ms=3000": f"health_probe_timeout_ms={probe_timeout_ms}",
         "health_sleep_ms=1000": f"health_sleep_ms={sleep_ms}",
         "health_attempt_limit=45": f"health_attempt_limit={attempt_limit}",
@@ -61,16 +67,12 @@ def _write_executable(path: Path, source: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
 
 
-def _run_smoke_contract(
-    tmp_path: Path,
-    smoke_run: str,
-    *,
-    delay_ms: int = 0,
-    ignore_timeout: bool = False,
-    force_timeout: bool = False,
-) -> tuple[subprocess.CompletedProcess[str], float]:
-    fake_bin = tmp_path / "fake-bin"
+def _run_workflow_shell(
+    tmp_path: Path, shell_source: str, *, mode: str
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    fake_bin = tmp_path / "workflow-bin"
     fake_bin.mkdir()
+    ledger = tmp_path / "wrapper-ledger.txt"
     _write_executable(
         fake_bin / "docker",
         """#!/usr/bin/env bash
@@ -82,51 +84,60 @@ case "${1:-}" in
   inspect)
     printf '10001:10001\\n'
     ;;
-  exec)
-    if [[ "$*" == *"_stcore/health"* ]]; then
-      delay_ms="${FAKE_HEALTH_DELAY_MS:-0}"
-      if (( delay_ms > 0 )); then
-        stamp="${EPOCHREALTIME/./}"
-        started_us=$((10#$stamp))
-        while :; do
-          stamp="${EPOCHREALTIME/./}"
-          current_us=$((10#$stamp))
-          if (( current_us - started_us >= delay_ms * 1000 )); then break; fi
-        done
-      fi
-    fi
-    ;;
-  logs)
-    printf 'fake container logs\\n' >&2
-    ;;
   *)
-    printf 'unexpected fake docker command: %s\\n' "$*" >&2
+    printf 'unbounded docker invocation: %s\\n' "$*" >&2
     exit 97
     ;;
 esac
 """,
     )
-    if ignore_timeout or force_timeout:
-        timeout_behavior = 'exec "$@"' if ignore_timeout else "sleep 0.02\nexit 124"
-        _write_executable(
-            fake_bin / "timeout",
-            f"""#!/usr/bin/env bash
+    _write_executable(
+        fake_bin / "uv",
+        """#!/usr/bin/env bash
 set -euo pipefail
-if [[ "${{1:-}}" == "--foreground" ]]; then shift; fi
-shift
-{timeout_behavior}
+printf '%s\\n' "$*" >> "$FAKE_WRAPPER_LEDGER"
+if [[ "${1:-}" != "run" || "${2:-}" != "--frozen" || "${3:-}" != "python" ||
+      "${4:-}" != "-m" || "${5:-}" != "release_checks.bounded_command" ||
+      "${6:-}" != "--timeout-ms" || "${8:-}" != "--" || "${9:-}" != "docker" ]]; then
+  printf 'invalid bounded wrapper invocation: %s\\n' "$*" >&2
+  exit 96
+fi
+operation="${10:-}"
+case "$operation" in
+  exec)
+    if [[ "$*" == *"_stcore/health"* ]]; then
+      if [[ "$FAKE_WRAPPER_MODE" == "health-fail" ]]; then exit 1; fi
+      exit 0
+    fi
+    if [[ "$*" == *"find /app"* ]]; then
+      if [[ "$FAKE_WRAPPER_MODE" == "artifact-fail" ]]; then exit 124; fi
+      exit 0
+    fi
+    exit 95
+    ;;
+  logs|rm)
+    if [[ "$FAKE_WRAPPER_MODE" == "always-timeout" ||
+          "$FAKE_WRAPPER_MODE" == "health-fail" ||
+          "$FAKE_WRAPPER_MODE" == "artifact-fail" ]]; then
+      exit 124
+    fi
+    ;;
+  *)
+    exit 94
+    ;;
+esac
 """,
-        )
-    shell_source = f'export PATH="{_bash_path(fake_bin)}:$PATH"\n{smoke_run}'
+    )
     environment = os.environ.copy()
     environment.update(
         {
-            "FAKE_HEALTH_DELAY_MS": str(delay_ms),
+            "FAKE_WRAPPER_LEDGER": _bash_path(ledger),
+            "FAKE_WRAPPER_MODE": mode,
         }
     )
-    started = time.monotonic()
+    prefixed_source = f'export PATH="{_bash_path(fake_bin)}:$PATH"\n{shell_source}'
     result = subprocess.run(
-        [_bash_executable(), "-c", shell_source],
+        [_bash_executable(), "-c", prefixed_source],
         cwd=Path.cwd(),
         env=environment,
         capture_output=True,
@@ -134,56 +145,45 @@ shift
         timeout=3,
         check=False,
     )
-    return result, time.monotonic() - started
+    ledger_lines = ledger.read_text(encoding="utf-8").splitlines() if ledger.exists() else []
+    return result, ledger_lines
 
 
-def test_ci_builds_non_root_space_and_runs_without_network() -> None:
+def test_ci_wires_every_bounded_space_command_and_preserves_cleanup_order() -> None:
     steps = _workflow_steps()
     export_run = str(steps["Export public Space bundle"]["run"])
     build_run = str(steps["Build non-root public Space image"]["run"])
     smoke_run = str(steps["Smoke public Space without network"]["run"])
     logs_step = steps["Always capture public Space logs"]
     cleanup_step = steps["Always remove public Space smoke container"]
+    wrapper = f"uv run --frozen python -m {BOUNDED_MODULE}"
 
     assert "scripts/export_hf_space.py" in export_run
     assert "local-inference-bench-gateway-space:rc" in build_run
     assert "--network none" in smoke_run
-    assert "local-inference-space-smoke" in smoke_run
     assert "Config.User" in smoke_run
     assert 'test "$runtime_user" = "10001:10001"' in smoke_run
-    defaults = {
-        name: int(value)
-        for name, value in re.findall(
-            r"^(health_(?:deadline|probe_timeout|sleep)_ms|health_attempt_limit)=(\d+)$",
-            smoke_run,
-            re.MULTILINE,
-        )
-    }
-    assert defaults == {
-        "health_deadline_ms": 55_000,
-        "health_probe_timeout_ms": 3_000,
-        "health_sleep_ms": 1_000,
-        "health_attempt_limit": 45,
-    }
-    assert 'for attempt in $(seq 1 "$health_attempt_limit")' in smoke_run
     assert "http://127.0.0.1:7860/_stcore/health" in smoke_run
-    assert "timeout --foreground" in smoke_run
+    assert f'{wrapper} --timeout-ms "$bounded_probe_ms" -- docker exec' in smoke_run
+    assert smoke_run.count(f"{wrapper} --timeout-ms 5000 -- docker logs") == 2
+    assert f"{wrapper} --timeout-ms 5000 -- docker exec" in smoke_run
+    assert "timeout --" not in smoke_run
     assert 'if [ "$completed_us" -le "$deadline_us" ]; then' in smoke_run
-    assert smoke_run.index("timeout --foreground") < smoke_run.index('completed_us="$(now_us)"')
+    assert smoke_run.index(f"{wrapper} --timeout-ms") < smoke_run.index('completed_us="$(now_us)"')
     assert smoke_run.index('completed_us="$(now_us)"') < smoke_run.index("healthy=1")
-    assert "if docker exec" not in smoke_run
-    docker_exec_lines = [line.strip() for line in smoke_run.splitlines() if "docker exec" in line]
-    assert len(docker_exec_lines) == 2
-    assert all("timeout --foreground" in line for line in docker_exec_lines)
-    timeout_branch = """if [ "$healthy" -ne 1 ]; then
-  docker logs local-inference-space-smoke >&2
-  exit 1
-fi"""
-    assert timeout_branch in smoke_run
+
     assert logs_step["if"] == "always()"
-    assert logs_step["run"] == "docker logs local-inference-space-smoke >&2 || true"
+    assert logs_step["run"] == (
+        f"{wrapper} --timeout-ms 5000 -- docker logs local-inference-space-smoke >&2 || true"
+    )
     assert cleanup_step["if"] == "always()"
-    assert cleanup_step["run"] == "docker rm -f local-inference-space-smoke || true"
+    assert cleanup_step["run"] == (
+        f"{wrapper} --timeout-ms 10000 -- docker rm -f local-inference-space-smoke || true"
+    )
+    step_names = list(steps)
+    assert step_names.index("Always capture public Space logs") < step_names.index(
+        "Always remove public Space smoke container"
+    )
 
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "space_remote_gate" not in workflow
@@ -191,50 +191,77 @@ fi"""
 
 def test_ci_space_health_accepts_an_on_time_success(tmp_path: Path) -> None:
     smoke_run = _shortened_smoke_run(
-        deadline_ms=500, probe_timeout_ms=100, sleep_ms=10, attempt_limit=3
+        deadline_ms=2_000,
+        minimum_probe_ms=10,
+        probe_timeout_ms=100,
+        sleep_ms=10,
+        attempt_limit=3,
     )
 
-    result, elapsed = _run_smoke_contract(tmp_path, smoke_run)
+    result, ledger = _run_workflow_shell(tmp_path, smoke_run, mode="on-time")
 
     assert result.returncode == 0, result.stderr
-    assert elapsed < 1.5
+    assert sum("docker exec" in line and "_stcore/health" in line for line in ledger) == 1
+    assert sum("docker exec" in line and "find /app" in line for line in ledger) == 1
 
 
-def test_ci_space_health_rejects_a_late_success(tmp_path: Path) -> None:
+def test_ci_space_health_and_failure_logs_fail_closed(tmp_path: Path) -> None:
     smoke_run = _shortened_smoke_run(
-        deadline_ms=100, probe_timeout_ms=500, sleep_ms=10, attempt_limit=1
+        deadline_ms=2_000,
+        minimum_probe_ms=10,
+        probe_timeout_ms=100,
+        sleep_ms=10,
+        attempt_limit=2,
     )
 
-    result, elapsed = _run_smoke_contract(tmp_path, smoke_run, delay_ms=250, ignore_timeout=True)
+    result, ledger = _run_workflow_shell(tmp_path, smoke_run, mode="health-fail")
 
     assert result.returncode != 0
-    assert "fake container logs" in result.stderr
-    assert elapsed < 1.5
+    assert sum("docker exec" in line and "_stcore/health" in line for line in ledger) == 2
+    assert sum("docker logs" in line for line in ledger) == 1
 
 
-def test_ci_space_health_bounds_each_hanging_child_process(tmp_path: Path) -> None:
+def test_ci_space_artifact_scan_and_logs_fail_closed(tmp_path: Path) -> None:
     smoke_run = _shortened_smoke_run(
-        deadline_ms=250, probe_timeout_ms=50, sleep_ms=10, attempt_limit=45
+        deadline_ms=2_000,
+        minimum_probe_ms=10,
+        probe_timeout_ms=100,
+        sleep_ms=10,
+        attempt_limit=3,
     )
 
-    result, elapsed = _run_smoke_contract(tmp_path, smoke_run, force_timeout=True)
+    result, ledger = _run_workflow_shell(tmp_path, smoke_run, mode="artifact-fail")
 
     assert result.returncode != 0
-    assert "fake container logs" in result.stderr
-    assert elapsed < 1.5
+    assert sum("docker exec" in line and "find /app" in line for line in ledger) == 1
+    assert sum("docker logs" in line for line in ledger) == 1
+
+
+def test_ci_always_log_timeout_cannot_block_the_following_cleanup_step(tmp_path: Path) -> None:
+    steps = _workflow_steps()
+    shell_source = "\n".join(
+        (
+            str(steps["Always capture public Space logs"]["run"]),
+            str(steps["Always remove public Space smoke container"]["run"]),
+        )
+    )
+
+    result, ledger = _run_workflow_shell(tmp_path, shell_source, mode="always-timeout")
+
+    assert result.returncode == 0, result.stderr
+    assert len(ledger) == 2
+    assert "docker logs local-inference-space-smoke" in ledger[0]
+    assert "docker rm -f local-inference-space-smoke" in ledger[1]
 
 
 def test_ci_space_artifact_scan_fails_closed() -> None:
-    smoke_run = str(_workflow_steps()["Smoke public Space without network"]["run"])
+    smoke_run = _space_smoke_run()
 
     assert smoke_run.splitlines()[0] == "set -euo pipefail"
     assert "/app" in smoke_run
     for forbidden_suffix in (".db", ".sqlite", ".gguf", ".safetensors", ".onnx", ".jsonl"):
         assert forbidden_suffix in smoke_run
-    assert (
-        'forbidden="$(timeout --foreground 5s docker exec local-inference-space-smoke find /app'
-        in smoke_run
-    )
+    assert 'if ! forbidden="$(uv run --frozen python -m release_checks.bounded_command' in smoke_run
     assert 'test -z "$forbidden"' in smoke_run
     assert "! docker exec" not in smoke_run
     assert "| grep ." not in smoke_run
