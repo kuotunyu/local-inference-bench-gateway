@@ -20,6 +20,8 @@ from dashboard.components import (
 )
 from dashboard.models import BenchmarkEvidence
 
+INTEGRITY_FAILURE = "Unavailable — evidence integrity check failed"
+
 
 @dataclass(frozen=True)
 class EvidenceViewModel:
@@ -297,7 +299,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
 
     st.markdown("### Aggregate decode throughput 比較")
     if not concurrency_ok:
-        render_state_message("Artifact 無法使用", "concurrency_summary.csv 無法讀取。", "warning")
+        render_state_message(INTEGRITY_FAILURE, "concurrency_summary.csv 無法讀取。", "warning")
     else:
         _render_measure_key("line", "Throughput／tok/s")
         st.altair_chart(build_throughput_chart(evidence.concurrency), width="stretch")
@@ -320,7 +322,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
             st.altair_chart(build_prefill_chart(evidence.prefill), width="stretch")
             st.caption("Median TTFT（秒）· 校準為實際 1,970 與 7,880 tokens 的輸入")
         else:
-            render_state_message("Artifact 無法使用", "prefill_summary.csv 無法讀取。", "warning")
+            render_state_message(INTEGRITY_FAILURE, "prefill_summary.csv 無法讀取。", "warning")
     with overhead_col:
         st.markdown("### Gateway 成本")
         overhead = evidence.overhead
@@ -333,7 +335,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
                 "milliseconds · JSON rewrite、Failover bookkeeping 與 SSE pass-through 的量測成本"
             )
         else:
-            render_state_message("Artifact 無法使用", "gateway_overhead.json 無法讀取。", "warning")
+            render_state_message(INTEGRITY_FAILURE, "gateway_overhead.json 無法讀取。", "warning")
 
     vram_col, kv_col = st.columns([1, 1.35], gap="large")
     with vram_col:
@@ -368,24 +370,26 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
                     )
                 else:
                     render_state_message(
-                        "Controlled scan 無法使用",
+                        INTEGRITY_FAILURE,
                         "Unified KV Cache paired Artifact 沒有共同的有效 concurrency。",
                         "warning",
                     )
             else:
                 render_state_message(
-                    "Controlled scan 無法使用",
+                    INTEGRITY_FAILURE,
                     "Unified KV Cache paired Artifact schema 無法辨識。",
                     "warning",
                 )
         else:
             render_state_message(
-                "Controlled scan 無法使用",
+                INTEGRITY_FAILURE,
                 "Unified KV Cache paired Artifact 無法讀取。",
                 "warning",
             )
 
     st.markdown("### 測量方法與 provenance")
+    if not evidence.provenance:
+        render_state_message(INTEGRITY_FAILURE, "provenance.json 無法驗證。", "warning")
     render_state_message("適用範圍", model.scope_note)
     st.markdown(
         '<div class="provenance-detail-gap" aria-hidden="true"></div>', unsafe_allow_html=True
