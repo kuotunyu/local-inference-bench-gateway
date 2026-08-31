@@ -53,6 +53,9 @@ Unified KV Cache comparisons where the corresponding committed artifacts verify 
 
 The canonical source repository is
 [`kuotunyu/local-inference-bench-gateway`](https://github.com/kuotunyu/local-inference-bench-gateway).
+See the canonical
+[Evaluation methodology (EVAL_REPORT.md)](https://github.com/kuotunyu/local-inference-bench-gateway/blob/main/EVAL_REPORT.md)
+for the benchmark protocol and interpretation boundaries.
 The scoped [MIT License](LICENSE) applies only to original source code authored by kuotunyu;
 third-party models, engines, packages, trademarks, and benchmark facts retain their own terms.
 See the [Third-party notices](THIRD_PARTY_NOTICES.md) for the recorded model and dependency

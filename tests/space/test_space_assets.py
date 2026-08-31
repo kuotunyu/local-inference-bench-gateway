@@ -144,4 +144,8 @@ def test_space_card_states_every_public_truth_boundary() -> None:
     assert "[MIT License](LICENSE)" in card
     assert "[Third-party notices](THIRD_PARTY_NOTICES.md)" in card
     assert "https://github.com/kuotunyu/local-inference-bench-gateway" in card
+    assert (
+        "[Evaluation methodology (EVAL_REPORT.md)](https://github.com/kuotunyu/"
+        "local-inference-bench-gateway/blob/main/EVAL_REPORT.md)"
+    ) in card
     assert re.search(r"https://[^ ]+\.hf\.space", card) is None

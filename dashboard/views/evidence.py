@@ -21,6 +21,17 @@ from dashboard.components import (
 from dashboard.models import BenchmarkEvidence
 
 INTEGRITY_FAILURE = "Unavailable — evidence integrity check failed"
+PUBLIC_EVIDENCE_LINKS_MARKDOWN = " · ".join(
+    (
+        "[GitHub source repository](https://github.com/kuotunyu/local-inference-bench-gateway)",
+        "[Evaluation methodology (EVAL_REPORT.md)](https://github.com/kuotunyu/"
+        "local-inference-bench-gateway/blob/main/EVAL_REPORT.md)",
+        "[MIT License](https://github.com/kuotunyu/local-inference-bench-gateway/blob/main/"
+        "LICENSE)",
+        "[Third-party notices](https://github.com/kuotunyu/local-inference-bench-gateway/"
+        "blob/main/THIRD_PARTY_NOTICES.md)",
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -249,6 +260,7 @@ def render_evidence(evidence: BenchmarkEvidence) -> None:
         else (f"{len(evidence.warnings)} 個 Artifact 警告")
     )
     render_source_badge("evidence", f"已提交的 aggregate Artifact · {verified}")
+    st.markdown(PUBLIC_EVIDENCE_LINKS_MARKDOWN)
     if evidence.warnings:
         render_state_message(
             "證據驗證警告",

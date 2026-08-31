@@ -24,6 +24,24 @@ This Space cannot connect to a visitor's local system.
 This Space provides neither live inference nor an SLA.
 Hosting sleep or cold start is not system uptime evidence.
 """
+CANONICAL_EVIDENCE_LINKS = (
+    (
+        "GitHub source repository",
+        "https://github.com/kuotunyu/local-inference-bench-gateway",
+    ),
+    (
+        "Evaluation methodology (EVAL_REPORT.md)",
+        "https://github.com/kuotunyu/local-inference-bench-gateway/blob/main/EVAL_REPORT.md",
+    ),
+    (
+        "MIT License",
+        "https://github.com/kuotunyu/local-inference-bench-gateway/blob/main/LICENSE",
+    ),
+    (
+        "Third-party notices",
+        "https://github.com/kuotunyu/local-inference-bench-gateway/blob/main/THIRD_PARTY_NOTICES.md",
+    ),
+)
 
 
 def _normalize_html_whitespace(value: str) -> str:
@@ -33,6 +51,16 @@ def _normalize_html_whitespace(value: str) -> str:
 
 def _semantic_markdown(app: AppTest) -> str:
     return " ".join(_normalize_html_whitespace(item.value) for item in app.markdown)
+
+
+def _https_markdown_links(app: AppTest) -> list[tuple[str, str]]:
+    links: list[tuple[str, str]] = []
+    for item in app.markdown:
+        links.extend(
+            (accessible_name, url)
+            for accessible_name, url in re.findall(r"\[([^\]]+)\]\((https://[^)]+)\)", item.value)
+        )
+    return links
 
 
 def _main_index(app: AppTest, element_type: str, containing: str | None = None) -> int:
@@ -105,6 +133,16 @@ def test_public_app_truth_contract_and_control_surface() -> None:
     assert "NVIDIA GeForce RTX 4090" in evidence_markdown
     assert "Ministral-3-8B-Instruct-2512-Q4_K_M.gguf" in evidence_markdown
     assert "Request-level raw runs 未公開" in evidence_markdown
-    assert "current GPU execution" not in evidence_markdown.lower()
+    assert "current gpu execution" not in evidence_markdown.lower()
     assert "目前 GPU 執行" not in evidence_markdown
     assert not app.selectbox
+
+
+def test_evidence_first_screen_exposes_only_canonical_https_sources() -> None:
+    app = AppTest.from_file(str(APP_PATH)).run(timeout=20)
+    app.radio[0].set_value("Committed Benchmark Evidence").run(timeout=20)
+
+    assert not app.exception
+    assert _https_markdown_links(app) == list(CANONICAL_EVIDENCE_LINKS)
+    source_links_index = _main_index(app, "markdown", "[GitHub source repository]")
+    assert source_links_index < _main_index(app, "markdown", "Aggregate decode throughput")
