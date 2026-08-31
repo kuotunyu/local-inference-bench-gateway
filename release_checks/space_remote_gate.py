@@ -105,7 +105,7 @@ def _get(
             _request_failure("remote_error", continuation=continuation)
         try:
             redirected = current.join(location)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, httpx.InvalidURL):
             _request_failure("remote_error", continuation=continuation)
         if not _is_hugging_face_url(redirected):
             _request_failure("remote_error", continuation=continuation)
@@ -173,31 +173,47 @@ def _page_items(payload: object, *, continuation: bool) -> tuple[list[object], o
     if not isinstance(pagination, dict):
         _stop("pagination_incomplete")
 
-    pagination_next: object = _MISSING
-    for key in ("next", "next_cursor", "nextCursor"):
-        if key in pagination:
-            pagination_next = pagination[key]
-            break
+    has_next_values = [pagination[key] for key in ("has_next", "hasNextPage") if key in pagination]
+    if any(not isinstance(value, bool) for value in has_next_values):
+        _stop("pagination_incomplete")
+    if len(set(has_next_values)) > 1:
+        _stop("pagination_incomplete")
+    has_next = has_next_values[0] if has_next_values else _MISSING
 
-    has_next = pagination.get("has_next", pagination.get("hasNextPage", _MISSING))
-    if has_next is True and pagination_next is _MISSING:
-        for key in ("cursor", "endCursor"):
-            if key in pagination:
-                pagination_next = pagination[key]
-                break
-        if pagination_next is _MISSING:
+    supplied: list[object] = []
+    if declared_next is not _MISSING:
+        supplied.append(declared_next)
+    supplied.extend(
+        pagination[key]
+        for key in ("next", "next_cursor", "nextCursor", "cursor", "endCursor")
+        if key in pagination
+    )
+
+    saw_null = any(value is None for value in supplied)
+    continuations: set[str] = set()
+    for value in supplied:
+        if value is None:
+            continue
+        if not isinstance(value, str) or not value.strip():
             _stop("pagination_incomplete")
-    elif has_next is False:
-        pagination_next = None
-    elif has_next is not _MISSING and not isinstance(has_next, bool):
+        continuations.add(value.strip())
+    if len(continuations) > 1 or (saw_null and continuations):
         _stop("pagination_incomplete")
 
-    if declared_next is not _MISSING and pagination_next is not _MISSING:
-        if declared_next != pagination_next:
+    continuation = next(iter(continuations)) if continuations else None
+    if has_next is True:
+        if continuation is None or saw_null:
             _stop("pagination_incomplete")
-    elif pagination_next is not _MISSING:
-        declared_next = pagination_next
-    return payload[item_keys[0]], declared_next
+        return payload[item_keys[0]], continuation
+    if has_next is False:
+        if continuation is not None:
+            _stop("pagination_incomplete")
+        return payload[item_keys[0]], None
+    if continuation is not None:
+        return payload[item_keys[0]], continuation
+    if supplied:
+        return payload[item_keys[0]], None
+    return payload[item_keys[0]], _MISSING
 
 
 def _candidate_space_id(item: object, *, continuation: bool) -> str:
@@ -244,7 +260,7 @@ def _continuation_url(value: object, current: httpx.URL) -> httpx.URL | None:
     else:
         try:
             target = current.join(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, httpx.InvalidURL):
             _stop("pagination_incomplete")
 
     if not _is_hugging_face_url(target, spaces_listing=True):
@@ -259,6 +275,10 @@ def _next_page_url(
     payload_next: object, response: httpx.Response, current: httpx.URL
 ) -> httpx.URL | None:
     link_next = _link_continuation(response)
+    if payload_next is None:
+        if link_next is not _MISSING:
+            _stop("pagination_incomplete")
+        return None
     payload_url = _continuation_url(payload_next, current)
     link_url = _continuation_url(link_next, current)
     if payload_url is not None and link_url is not None and payload_url != link_url:
