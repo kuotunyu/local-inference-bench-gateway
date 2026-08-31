@@ -296,6 +296,8 @@ Runtime requirements:
 - CPU-only image with no CUDA, GPU, model-serving, or inference dependencies;
 - non-root runtime user `10001:10001`;
 - explicit `COPY` instructions rather than `COPY . .`;
+- an exact `COPY .streamlit/config.toml /app/.streamlit/config.toml` instruction so the disabled
+  telemetry setting is present at the non-root runtime user's effective Streamlit config path;
 - exactly pinned direct runtime packages `streamlit==1.61.1`, `pandas==3.0.5`, and
   `altair==6.2.2`, with a test that checks all three against `uv.lock`;
 - `gatherUsageStats = false`;
@@ -326,6 +328,12 @@ Network controls and verification must establish that:
   connection attempt;
 - all benchmark and Demo data come from the bundle; and
 - user clicks on documentation links are browser navigation, not server fetches.
+
+The valid-bundle and `NEVER_DEPLOY` browser gates record the runtime request graph without request
+blocking, route interception, URL rewriting, or response substitution. Each graph preserves the
+original full URL, resource type, and initiator metadata for every non-loopback origin. Only
+loopback and same-origin runtime requests are allowed. `https://data.streamlit.io`, Fivetran
+webhooks, or any other external origin is RED even when the application remains visually usable.
 
 A container smoke run with no outbound network must start Streamlit and pass its internal local
 process-health probe. A separate normal-network browser smoke may expose port 7860 solely for UI
@@ -404,6 +412,8 @@ bundle verifier that rejects:
 - Confirm only the Streamlit app is started and port 7860 is used.
 - Start with outbound networking disabled and check internal Streamlit process health.
 - Run a browser smoke against an exposed local port and visit all four views.
+- Record the browser request graph with original full URLs, resource types, and initiator metadata;
+  fail on every non-loopback or cross-origin request, including `data.streamlit.io` and Fivetran.
 - Confirm no model download, gateway process, SQLite database, or external request appears in logs
   or filesystem outputs.
 
@@ -415,6 +425,8 @@ Perform bounded visual review at exact `1440x900` desktop and `390x844` mobile v
 - navigation, badges, charts, tooltips, legends, tables, and error states remain readable;
 - no horizontal overflow or clipped disclosure occurs;
 - no Streamlit exception or browser-console error is present;
+- the valid and `NEVER_DEPLOY` gates each retain an unintercepted request graph and report zero
+  non-loopback or cross-origin requests at both viewports;
 - fixture state cannot be mistaken for current backend health; and
 - the four views retain the existing restrained scientific-console design.
 
@@ -423,6 +435,18 @@ canonical claim selector. The review rejects universal engine-winner language, p
 claims, current GPU/queue/health claims, uptime/SLA claims, and any suggestion that the Space is
 running the recorded model. Demo values may be fixed only when the Demo badge and illustrative
 scope remain visible.
+
+If acceptance records an external request, preserve its original URL and initiator evidence before
+cleanup. Correct the governing spec and plan in one docs-only commit and obtain fresh review before
+changing product or test files. The regression files are exactly
+`tests/space/test_space_assets.py` and `tests/space/test_release_runbook.py`; the permitted
+correction files are exactly `space/Dockerfile` and `docs/HF_SPACE_RELEASE.md`. The Docker
+regression requires the exact scoped config copy above and rejects broad copies or `CMD`-only
+hiding of telemetry. The runbook regression requires the unintercepted no-external-origin
+request-graph gate. Commit those four files together without amending the prior Task 13 runbook
+commit, re-run the focused GREEN checks and the complete Task 13 Steps 4, 6, and 7, require zero
+external requests in both visual gates, clean up only preflight-proven task-owned resources, and
+finish at a clean HEAD.
 
 ## 12. Deployment and About gates
 
@@ -457,8 +481,8 @@ The design is successfully implemented only when all of the following are true:
    operational views.
 4. Every benchmark claim is derived from verified committed evidence and fails closed when its
    source is unavailable.
-5. The Docker Space is CPU-only, non-root, network-independent at runtime, and honest about sleep
-   and cold start.
+5. The Docker Space is CPU-only, non-root, network-independent at runtime, emits zero non-loopback
+   or cross-origin browser requests, and is honest about sleep and cold start.
 6. The exported payload passes secret, size, license, artifact, source-revision, and denylist
    checks.
 7. Desktop and mobile review preserves the truth contract and scientific-console readability.
