@@ -1,6 +1,6 @@
 ---
 title: Local Inference Benchmark Gateway · Public Evidence Demo
-emoji: "◉"
+emoji: "📊"
 colorFrom: green
 colorTo: gray
 sdk: docker
