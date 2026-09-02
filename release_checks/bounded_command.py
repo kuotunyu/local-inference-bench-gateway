@@ -342,12 +342,17 @@ def _terminate_posix_tree(process: subprocess.Popen[bytes], deadline_ns: int) ->
     except OSError as error:
         if error.errno != errno.ESRCH:
             raise
+    # Reap the direct child before polling the group: a killed but unreaped child
+    # is a zombie that still keeps its process group alive, so polling first would
+    # spin until the deadline and misreport a successful teardown as a failure.
+    if not _wait_until(process, deadline_ns):
+        return False
     while _posix_group_exists(process.pid):
         remaining = _remaining_seconds(deadline_ns)
         if remaining <= 0:
             return False
         time.sleep(min(_TREE_POLL_SECONDS, remaining))
-    return _wait_until(process, deadline_ns)
+    return True
 
 
 def _terminate_tree(
@@ -387,12 +392,15 @@ def _emergency_terminate_tree(
                 process.kill()
             except BaseException:
                 return False
+    # Same ordering as _terminate_posix_tree: reap the zombie child first.
+    if not _wait_until(process, deadline_ns):
+        return False
     while _posix_group_exists(process.pid):
         remaining = _remaining_seconds(deadline_ns)
         if remaining <= 0:
             return False
         time.sleep(min(_TREE_POLL_SECONDS, remaining))
-    return _wait_until(process, deadline_ns)
+    return True
 
 
 def _safe_terminate_tree(
