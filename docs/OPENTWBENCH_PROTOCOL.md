@@ -34,9 +34,13 @@ Repeated stems with the same unordered option set fail preparation.
 
 Use the unchanged `BoxExtractor` from `twinkle-eval==2.10.0`, but apply it only to
 final `message.content`. Start the server with `--reasoning-format deepseek` so
-thoughts are separated into `reasoning_content`. The evaluator checks `/props` and
-rejects other or missing formats before sending questions; `none` and
-`deepseek-legacy` can mix thoughts into scored content. Unlike that version's standard runner, do not fall back to
+thoughts are separated into `reasoning_content`. Each request also explicitly sets
+`reasoning_format=deepseek`; synthetic warmups must demonstrate separate reasoning
+before formal admission. The evaluator stops on leaked channel markers rather than
+extracting an intermediate answer. In this pinned runtime, `/props` serializes a
+fresh task's defaults, so its `reasoning_format` is not the effective chat setting
+([source](https://github.com/ggml-org/llama.cpp/blob/b29c606e2/tools/server/server-context.cpp)).
+Preserve it for provenance, but verify actual responses. Unlike that version's standard runner, do not fall back to
 reasoning when final content is absent. Preserve finish reason, including truncation.
 Parsed answers outside A–D are invalid. Unparsed answers remain incorrect in the
 denominator; report their rate separately. A parsed answer on a length finish is scored

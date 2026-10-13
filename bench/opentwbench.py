@@ -65,6 +65,8 @@ def prepare_rows(rows: list[dict], seed: int) -> list[dict]:
 def score_response(response: dict, gold: str, extract: Callable) -> dict:
     choice = response["choices"][0]
     content = choice["message"].get("content") or ""
+    if any(marker in content for marker in ("<|channel>", "<channel|>", "<think>", "</think>")):
+        raise ValueError("Unexpected reasoning channel in final content")
     predicted = extract(content)
     parsed = isinstance(predicted, str) and predicted in set(LETTERS)
     return {
@@ -140,12 +142,6 @@ def run(args: argparse.Namespace) -> None:
         (args.output / "manifest.json").write_text(
             json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        params = config["server_props"].get("default_generation_settings", {}).get("params", {})
-        if params.get("reasoning_format") != "deepseek":
-            raise ValueError(
-                "Final-only scoring requires --reasoning-format deepseek; "
-                "preserved manifest, no questions sent"
-            )
         with (args.output / "raw.jsonl").open("x", encoding="utf-8") as handle:
             for row in prepared:
                 request = {
@@ -159,6 +155,7 @@ def run(args: argparse.Namespace) -> None:
                     "seed": args.seed,
                     "max_tokens": 1536,
                     "stream": False,
+                    "reasoning_format": "deepseek",
                     "cache_prompt": False,
                     "chat_template_kwargs": {"enable_thinking": args.thinking},
                 }

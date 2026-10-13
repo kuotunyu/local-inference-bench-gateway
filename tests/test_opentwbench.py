@@ -143,7 +143,7 @@ def test_http_failure_preserved_and_no_next_question(tmp_path, fake_eval_backend
         if request.url.path == "/props":
             return httpx.Response(
                 200,
-                json={"default_generation_settings": {"params": {"reasoning_format": "deepseek"}}},
+                json={"default_generation_settings": {"params": {"reasoning_format": "none"}}},
             )
         return httpx.Response(503, json={"error": "synthetic failure"})
 
@@ -192,7 +192,7 @@ def test_unparsed_response_does_not_abort_or_leak_context(tmp_path, fake_eval_ba
         if request.url.path == "/props":
             return httpx.Response(
                 200,
-                json={"default_generation_settings": {"params": {"reasoning_format": "deepseek"}}},
+                json={"default_generation_settings": {"params": {"reasoning_format": "none"}}},
             )
         submitted.append(json.loads(request.content))
         return httpx.Response(
@@ -205,39 +205,17 @@ def test_unparsed_response_does_not_abort_or_leak_context(tmp_path, fake_eval_ba
     run(args)
     summary = json.loads((args.output / "summary.json").read_text(encoding="utf-8"))
     assert len(submitted) == 2 and "SECRET" not in json.dumps(submitted)
+    assert all(request["reasoning_format"] == "deepseek" for request in submitted)
     assert summary["complete"] is True and summary["errors"] == 0
     assert summary["accuracy"] == 0 and summary["parse_rate"] == 0
     assert summary["length_finishes"] == 2
 
 
-@pytest.mark.parametrize("mode", ["none", "deepseek-legacy", None])
-def test_reasoning_protocol_rejected_before_questions(tmp_path, fake_eval_backend, mode):
-    import json
+def test_channel_markers_rejected_before_scoring():
+    response = {"choices": [{"message": {"content": "<|channel>thought\nwrong intermediate"}}]}
 
-    import httpx
+    def forbidden(_):
+        pytest.fail("Mixed reasoning must never reach extractor")
 
-    from bench.opentwbench import run
-
-    calls = []
-
-    def handler(request):
-        calls.append(request.url.path)
-        if request.url.path == "/props":
-            return httpx.Response(
-                200, json={"default_generation_settings": {"params": {"reasoning_format": mode}}}
-            )
-        return httpx.Response(
-            200, json={"choices": [{"message": {"content": "A"}, "finish_reason": "stop"}]}
-        )
-
-    fake_eval_backend(handler)
-    args = run_args(tmp_path)
-    with pytest.raises(ValueError, match="reasoning-format deepseek"):
-        run(args)
-    assert calls == ["/props"]
-    assert not (args.output / "raw.jsonl").exists()
-    manifest = json.loads((args.output / "manifest.json").read_text(encoding="utf-8"))
-    assert (
-        manifest["server_props"]["default_generation_settings"]["params"]["reasoning_format"]
-        == mode
-    )
+    with pytest.raises(ValueError, match="reasoning channel"):
+        score_response(response, "A", forbidden)
