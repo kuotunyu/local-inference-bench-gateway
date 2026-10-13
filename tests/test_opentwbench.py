@@ -141,7 +141,10 @@ def test_http_failure_preserved_and_no_next_question(tmp_path, fake_eval_backend
     def handler(request):
         calls.append(request.url.path)
         if request.url.path == "/props":
-            return httpx.Response(200, json={"synthetic": True})
+            return httpx.Response(
+                200,
+                json={"default_generation_settings": {"params": {"reasoning_format": "deepseek"}}},
+            )
         return httpx.Response(503, json={"error": "synthetic failure"})
 
     fake_eval_backend(handler)
@@ -187,7 +190,10 @@ def test_unparsed_response_does_not_abort_or_leak_context(tmp_path, fake_eval_ba
 
     def handler(request):
         if request.url.path == "/props":
-            return httpx.Response(200, json={"synthetic": True})
+            return httpx.Response(
+                200,
+                json={"default_generation_settings": {"params": {"reasoning_format": "deepseek"}}},
+            )
         submitted.append(json.loads(request.content))
         return httpx.Response(
             200,
@@ -202,3 +208,36 @@ def test_unparsed_response_does_not_abort_or_leak_context(tmp_path, fake_eval_ba
     assert summary["complete"] is True and summary["errors"] == 0
     assert summary["accuracy"] == 0 and summary["parse_rate"] == 0
     assert summary["length_finishes"] == 2
+
+
+@pytest.mark.parametrize("mode", ["none", "deepseek-legacy", None])
+def test_reasoning_protocol_rejected_before_questions(tmp_path, fake_eval_backend, mode):
+    import json
+
+    import httpx
+
+    from bench.opentwbench import run
+
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        if request.url.path == "/props":
+            return httpx.Response(
+                200, json={"default_generation_settings": {"params": {"reasoning_format": mode}}}
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": "A"}, "finish_reason": "stop"}]}
+        )
+
+    fake_eval_backend(handler)
+    args = run_args(tmp_path)
+    with pytest.raises(ValueError, match="reasoning-format deepseek"):
+        run(args)
+    assert calls == ["/props"]
+    assert not (args.output / "raw.jsonl").exists()
+    manifest = json.loads((args.output / "manifest.json").read_text(encoding="utf-8"))
+    assert (
+        manifest["server_props"]["default_generation_settings"]["params"]["reasoning_format"]
+        == mode
+    )

@@ -140,6 +140,12 @@ def run(args: argparse.Namespace) -> None:
         (args.output / "manifest.json").write_text(
             json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        params = config["server_props"].get("default_generation_settings", {}).get("params", {})
+        if params.get("reasoning_format") != "deepseek":
+            raise ValueError(
+                "Final-only scoring requires --reasoning-format deepseek; "
+                "preserved manifest, no questions sent"
+            )
         with (args.output / "raw.jsonl").open("x", encoding="utf-8") as handle:
             for row in prepared:
                 request = {

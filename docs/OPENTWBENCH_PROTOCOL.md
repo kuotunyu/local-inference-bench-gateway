@@ -33,7 +33,10 @@ and seed, remap the gold answer, and use the identical prepared questions for bo
 Repeated stems with the same unordered option set fail preparation.
 
 Use the unchanged `BoxExtractor` from `twinkle-eval==2.10.0`, but apply it only to
-final `message.content`. Unlike that version's standard runner, do not fall back to
+final `message.content`. Start the server with `--reasoning-format deepseek` so
+thoughts are separated into `reasoning_content`. The evaluator checks `/props` and
+rejects other or missing formats before sending questions; `none` and
+`deepseek-legacy` can mix thoughts into scored content. Unlike that version's standard runner, do not fall back to
 reasoning when final content is absent. Preserve finish reason, including truncation.
 Parsed answers outside A–D are invalid. Unparsed answers remain incorrect in the
 denominator; report their rate separately. A parsed answer on a length finish is scored
