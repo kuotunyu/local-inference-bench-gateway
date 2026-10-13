@@ -261,6 +261,7 @@ uv run --frozen python -m release_checks.cli
 - [PRODUCTION_SCALING.md](PRODUCTION_SCALING.md) — 離開單機邊界後必須改變的設計
 - [Third-party notices](THIRD_PARTY_NOTICES.md) — licensing 與 redistribution boundaries
 - [Source audit](docs/SOURCE_AUDIT.md) — source-to-public boundary 與 clean-lineage audit
+- [OpenTWBench protocol](docs/OPENTWBENCH_PROTOCOL.md) — 本機台灣知識／推論成本評測規格；[兩組完整結果](docs/OPENTWBENCH_RESULTS.md)：thinking +2.30 個百分點、平均延遲 4.89 倍，含不確定性與限制
 
 ## License
 
