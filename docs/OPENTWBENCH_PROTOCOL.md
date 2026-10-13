@@ -1,6 +1,6 @@
 # Taiwan knowledge and local inference cost
 
-Status: preparation and synthetic smoke only; no Formosa benchmark scores yet.
+Status: both local arms completed on 2026-10-13; see [results and limitations](OPENTWBENCH_RESULTS.md).
 This is a new, independent experiment. Earlier engine benchmarks remain frozen.
 
 ## Question and fixed configurations
