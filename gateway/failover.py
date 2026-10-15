@@ -8,9 +8,12 @@ since a backend can go down (or recover) between poll intervals; relying on a st
 to skip an attempt would risk both false negatives (skip a backend that already recovered) and
 false positives (attempt a backend the health checker already knows is down, wasting a timeout).
 
-Request-time failover walks an alias's backend list in order. A connection failure, timeout, or
-5xx from a non-final backend triggers a move to the next one; a 4xx is NOT retried (it usually
-reflects a malformed request that would fail identically everywhere). Non-final backends use a
+Request-time failover walks an alias's backend list in order. A connection failure, timeout,
+protocol error, or 5xx from a non-final backend triggers a move to the next one; a 4xx is NOT
+retried (it usually reflects a malformed request that would fail identically everywhere).
+Failover only ever happens before any byte has been forwarded downstream -- once the client has
+started receiving a stream, a mid-stream upstream failure terminates that stream (app.py logs
+`stream_read_error`) instead of silently restarting it on another backend. Non-final backends use a
 shorter read timeout than the last one in the chain, so a hung (not just refused) backend doesn't
 stall the whole request for the full generous timeout before the gateway gives up on it and tries
 the next candidate.
@@ -113,7 +116,11 @@ async def open_stream_with_failover(
             handle = await backend_io.open_stream(
                 client, backend, client_body, timeout=_timeout_for(is_last)
             )
-        except (backend_io.BackendUnavailable, backend_io.BackendTimeout) as e:
+        except (
+            backend_io.BackendUnavailable,
+            backend_io.BackendTimeout,
+            backend_io.BackendProtocolError,
+        ) as e:
             reason = safe_failure_reason(e)
             attempts.append((backend.name, reason))
             if is_last:
