@@ -31,7 +31,29 @@ class BackendTimeout(Exception):
 
 
 class BackendProtocolError(Exception):
-    """Backend returned a response that is not a usable OpenAI JSON object."""
+    """Backend spoke HTTP badly: an unusable OpenAI JSON object, or a protocol-level violation
+    (connection closed without a response, malformed framing) before a response was usable."""
+
+
+def _mapped_transport_error(exc: httpx.TransportError) -> Exception:
+    """Maps an httpx transport failure onto the three failure classes failover.py understands.
+
+    httpx raises more than ConnectError and TimeoutException at the transport layer: a backend
+    that accepts the TCP connection and then closes it without replying (a restarting
+    llama-server or Ollama) raises RemoteProtocolError, and a socket that dies mid-exchange
+    raises ReadError/WriteError. Those used to escape the failover chain entirely. Timeout is
+    checked first so its classification survives (ConnectTimeout/ReadTimeout are both
+    TimeoutException subclasses), then connect-level failures, then protocol violations.
+    """
+    if isinstance(exc, httpx.TimeoutException):
+        return BackendTimeout(str(exc))
+    if isinstance(exc, httpx.ConnectError):
+        return BackendUnavailable(str(exc))
+    if isinstance(exc, httpx.ProtocolError):
+        return BackendProtocolError(str(exc))
+    # ReadError, WriteError, ProxyError, UnsupportedProtocol, CloseError: no usable response
+    # came back from this backend, which is what BackendUnavailable means to failover.py.
+    return BackendUnavailable(str(exc))
 
 
 def _build_upstream_request(backend: Backend, client_body: dict) -> tuple[str, dict, dict]:
@@ -54,10 +76,8 @@ async def forward_non_streaming(
     upstream_body["stream"] = False
     try:
         resp = await client.post(url, json=upstream_body, headers=headers, timeout=timeout)
-    except httpx.ConnectError as e:
-        raise BackendUnavailable(str(e)) from e
-    except httpx.TimeoutException as e:
-        raise BackendTimeout(str(e)) from e
+    except httpx.TransportError as e:
+        raise _mapped_transport_error(e) from e
     try:
         content = resp.json()
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -94,10 +114,9 @@ async def open_stream(
     ctx = client.stream("POST", url, json=upstream_body, headers=headers, timeout=timeout)
     try:
         response = await ctx.__aenter__()
-    except httpx.ConnectError as e:
-        raise BackendUnavailable(str(e)) from e
-    except httpx.TimeoutException as e:
-        raise BackendTimeout(str(e)) from e
+    except httpx.TransportError as e:
+        # Still pre-response: no byte has reached the client, so this is safe to fail over.
+        raise _mapped_transport_error(e) from e
     return StreamHandle(ctx, response)
 
 
